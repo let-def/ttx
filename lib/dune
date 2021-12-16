@@ -1,0 +1,3 @@
+(library
+  (name typedtree_printer)
+  (libraries cmon compiler-libs.common))
