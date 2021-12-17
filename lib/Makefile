@@ -1,2 +1,2 @@
 all:
-	dune build typedtree_printer.cma
+	dune build ttx_printer.cma

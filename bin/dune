@@ -1,4 +1,9 @@
 (executable
   (name cmi_printer)
   (modules cmi_printer)
-  (libraries compiler-libs.common typedtree_printer))
+  (libraries compiler-libs.common ttx_printer))
+
+(executable
+  (name cmt_printer)
+  (modules cmt_printer)
+  (libraries compiler-libs.common ttx_printer))

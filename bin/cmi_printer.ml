@@ -1,13 +1,12 @@
 open Cmon
-open Typedtree_printer
+open Ttx_printer
+open Print_utils
 
 let pers_flags = function
   | Cmi_format.Rectypes -> constant "Rectypes"
   | Cmi_format.Alerts alerts ->
-    construct "Alerts" [
-      list_map (Types_printer.pair string string)
-        (Misc.Stdlib.String.Map.bindings alerts)
-    ]
+    construct "Alerts" [list_map (pair string string)
+                                 (Misc.Stdlib.String.Map.bindings alerts)]
   | Cmi_format.Opaque -> constant "Opaque"
   | Cmi_format.Unsafe_string-> constant "Unsafe_string"
 
@@ -23,7 +22,7 @@ let cmi_infos {
   record [
     "cmi_name"  , string cmi_name;
     "cmi_sign"  , Types_printer.Types.signature cmi_sign;
-    "cmi_crcs"  , list_map (Types_printer.pair string (Types_printer.option digest)) cmi_crcs;
+    "cmi_crcs"  , list_map (pair string (option digest)) cmi_crcs;
     "cmi_flags" , list_map pers_flags cmi_flags;
   ]
 

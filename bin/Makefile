@@ -1,5 +1,5 @@
 all:
-	dune build cmi_printer.exe
+	dune build cmt_printer.exe
 
 clean:
 	dune clean
