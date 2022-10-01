@@ -20,7 +20,17 @@ module Env = struct
     | Mod_unbound_illegal_recursion ->
       constant "Mod_unbound_illegal_recursion"
 
-  let rec summary = function
+  let summary_table : summary Memo.t = Memo.create ()
+
+  let rec summary s =
+    match Memo.lookup summary_table s with
+    | Some cmon -> cmon
+    | None ->
+      let cmon = summary' s in
+      Memo.add summary_table s cmon;
+      cmon
+
+  and summary' = function
     | Env_empty -> constant "Env_empty"
     | Env_value (sm, id, vd) ->
       construct "Env_value" [summary sm; ident id;

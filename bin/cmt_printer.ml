@@ -79,9 +79,9 @@ module Cmt = struct
       "cmt_sourcefile"         , option string cmt_sourcefile;
       "cmt_builddir"           , string cmt_builddir;
       "cmt_loadpath"           , list_map string cmt_loadpath;
-      "cmt_source_digest"      , option string cmt_source_digest;
+      "cmt_source_digest"      , option digest cmt_source_digest;
       "cmt_initial_env"        , Env.env cmt_initial_env;
-      "cmt_imports"            , list_map (pair string (option string)) cmt_imports;
+      "cmt_imports"            , list_map (pair string (option digest)) cmt_imports;
       "cmt_interface_digest"   , option digest cmt_interface_digest;
       "cmt_use_summaries"      , bool cmt_use_summaries;
     ]
@@ -90,5 +90,7 @@ end
 let infos = Cmt_format.read Sys.argv.(1)
 
 let () =
-  PPrint.ToChannel.pretty 0.9 80 stdout
-    (Cmon.print (pair (option cmi_infos) (option Cmt.cmt_infos) infos))
+  let width = Utils.terminal_width 1 in
+  PPrint.ToChannel.pretty 0.9 width stdout
+    (Cmon.print (pair (option cmi_infos) (option Cmt.cmt_infos) infos));
+  print_newline ()

@@ -184,7 +184,17 @@ module Types = struct
     | Fpresent -> construct "Fpresent" []
     | Fabsent  -> construct "Fabsent" []
 
-  let rec type_expr { id; level; scope; desc } =
+  let type_table = Memo.create ()
+
+  let rec type_expr t =
+    match Memo.lookup type_table t with
+    | Some cmon -> cmon
+    | None ->
+      let result = type_expr' t in
+      Memo.add type_table t result;
+      result
+
+  and type_expr' { id; level; scope; desc } =
     record [
       "id", int id;
       "level", int level;
@@ -571,7 +581,7 @@ module Types = struct
       "cstr_uid"          , uid cstr_uid;
     ]
 
-  let rec label_description
+  let (*rec*) label_description
       { lbl_name; lbl_res; lbl_arg; lbl_mut; lbl_pos; lbl_all; lbl_repres;
         lbl_private; lbl_loc; lbl_attributes; lbl_uid }
     =
@@ -581,7 +591,7 @@ module Types = struct
       "lbl_arg"        , type_expr lbl_arg;
       "lbl_mut"        , Asttypes.mutable_flag lbl_mut;
       "lbl_pos"        , int lbl_pos;
-      "lbl_all"        , array_map label_description lbl_all;
+      "lbl_all"        , (ignore lbl_all; Cmon.constant "TODO"); (*array_map label_description lbl_all;*)
       "lbl_repres"     , record_representation lbl_repres;
       "lbl_private"    , Asttypes.private_flag lbl_private;
       "lbl_loc"        , location lbl_loc;
