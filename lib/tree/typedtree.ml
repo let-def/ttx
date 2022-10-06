@@ -1,26 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                                 OCaml                                  *)
-(*                                                                        *)
-(*             Xavier Leroy, projet Cristal, INRIA Rocquencourt           *)
-(*                                                                        *)
-(*   Copyright 1996 Institut National de Recherche en Informatique et     *)
-(*     en Automatique.                                                    *)
-(*                                                                        *)
-(*   All rights reserved.  This file is distributed under the terms of    *)
-(*   the GNU Lesser General Public License version 2.1, with the          *)
-(*   special exception on linking described in the file LICENSE.          *)
-(*                                                                        *)
-(**************************************************************************)
-
-(** Abstract syntax tree after typing *)
-
-
-(** By comparison with {!Parsetree}:
-    - Every {!Longindent.t} is accompanied by a resolved {!Path.t}.
-
-*)
-
 open Asttypes
 
 (* Value expressions for the core language *)
@@ -595,26 +572,6 @@ and package_type = {
   pack_txt : Longident.t loc;
 }
 
-and row_field = {
-  rf_desc : row_field_desc;
-  rf_loc : Location.t;
-  rf_attributes : attributes;
-}
-
-and row_field_desc =
-    Ttag of string loc * bool * core_type list
-  | Tinherit of core_type
-
-and object_field = {
-  of_desc : object_field_desc;
-  of_loc : Location.t;
-  of_attributes : attributes;
-}
-
-and object_field_desc =
-  | OTtag of string loc * core_type
-  | OTinherit of core_type
-
 and value_description =
   { val_id: Ident.t;
     val_name: string loc;
@@ -700,64 +657,6 @@ and extension_constructor =
 and extension_constructor_kind =
     Text_decl of constructor_arguments * core_type option
   | Text_rebind of Path.t * Longident.t loc
-
-and class_type =
-    {
-     cltyp_desc: class_type_desc;
-     cltyp_type: Types.class_type;
-     cltyp_env: Env.t;
-     cltyp_loc: Location.t;
-     cltyp_attributes: attributes;
-    }
-
-and class_type_desc =
-    Tcty_constr of Path.t * Longident.t loc * core_type list
-  | Tcty_signature of class_signature
-  | Tcty_arrow of arg_label * core_type * class_type
-  | Tcty_open of open_description * class_type
-
-and class_signature = {
-    csig_self : core_type;
-    csig_fields : class_type_field list;
-    csig_type : Types.class_signature;
-  }
-
-and class_type_field = {
-    ctf_desc: class_type_field_desc;
-    ctf_loc: Location.t;
-    ctf_attributes: attributes;
-  }
-
-and class_type_field_desc =
-  | Tctf_inherit of class_type
-  | Tctf_val of (string * mutable_flag * virtual_flag * core_type)
-  | Tctf_method of (string * private_flag * virtual_flag * core_type)
-  | Tctf_constraint of (core_type * core_type)
-  | Tctf_attribute of attribute
-
-and class_declaration =
-  class_expr class_infos
-
-and class_description =
-  class_type class_infos
-
-and class_type_declaration =
-  class_type class_infos
-
-and 'a class_infos =
-  { ci_virt: virtual_flag;
-    ci_params: (core_type * (variance * injectivity)) list;
-    ci_id_name : string loc;
-    ci_id_class: Ident.t;
-    ci_id_class_type : Ident.t;
-    ci_id_object : Ident.t;
-    ci_id_typehash : Ident.t;
-    ci_expr: 'a;
-    ci_decl: Types.class_declaration;
-    ci_type_decl : Types.class_type_declaration;
-    ci_loc: Location.t;
-    ci_attributes: attributes;
-   }
 
 type implementation = {
   structure: structure;

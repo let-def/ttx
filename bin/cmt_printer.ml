@@ -91,6 +91,7 @@ let infos = Cmt_format.read Sys.argv.(1)
 
 let () =
   let width = Utils.terminal_width 1 in
+  let width = if width = -1 then 240 else width in
   PPrint.ToChannel.pretty 0.9 width stdout
     (Cmon.print (pair (option cmi_infos) (option Cmt.cmt_infos) infos));
   print_newline ()

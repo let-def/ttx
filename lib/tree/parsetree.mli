@@ -37,15 +37,6 @@ type type_extension
 type type_exception
 type extension_constructor
 type extension_constructor_kind
-type class_type
-type class_type_field
-type class_description
-type class_declaration
-type class_type_declaration
-type class_signature
-type class_expr
-type class_field
-type class_structure
 type module_type
 type module_declaration
 type module_substitution
@@ -323,8 +314,6 @@ module Expression : sig
 
        Can only be used as the expression under Cfk_concrete
        for methods (not values). *)
-    | Object of class_structure node
-    (* object ... end *)
     | Newtype of string loc * expression node
     (* fun (type node) -> E *)
     | Pack of module_expr node
@@ -425,156 +414,6 @@ module Type_exception : sig
   val constructor : type_exception node -> extension_constructor node
 end
 
-(** {1 Class language} *)
-
-(* Type expressions for the class language *)
-
-module Class_type : sig
-  type desc =
-    | Constr of longident * type_expr node list
-    (* c
-           ['a1, ..., 'an] c *)
-    | Signature of class_signature node
-    (* object ... end *)
-    | Arrow of arg_label * type_expr node * class_type node
-    (* T -> CT       Simple
-       ~l:T -> CT    Labelled l
-       ?l:T -> CT    Optional l
-    *)
-    | Extension of extension node
-    (* [%id] *)
-    | Open of open_description node * class_type node
-    (* let open M in CT *)
-
-  val desc : class_type node -> desc
-end
-
-module Class_signature : sig
-  type 'a getter = class_signature node -> 'a
-  val self : class_signature node -> type_expr node
-  val fields : class_signature node -> class_type_field node list
-end
-
-module Class_type_field : sig
-  type 'a getter = class_type_field node -> 'a
-  type desc =
-    | Inherit of class_type node
-    (* inherit CT *)
-    | Val of (label loc * mutable_flag * virtual_flag * type_expr node)
-    (* val x: T *)
-    | Method  of (label loc * private_flag * virtual_flag * type_expr node)
-    (* method x: T
-
-       Note: T can be a Ptyp_poly.
-    *)
-    | Constraint  of (type_expr node * type_expr node)
-    (* constraint T1 = T2 *)
-    | Attribute of attribute node
-    (* [@@@id] *)
-    | Extension of extension node
-    (* [%%id] *)
-
-  val desc : class_type_field node -> desc
-end
-
-module type CLASS_INFOS = sig
-  type 'a getter
-  val name: string loc getter
-  val virt : virtual_flag getter
-  val params : (type_expr node * variance * injectivity) list getter
-end
-
-module Class_description : sig
-  include CLASS_INFOS with type 'a getter = class_description node -> 'a
-  val typ : class_type node getter
-end
-
-module Class_type_declaration : sig
-  include CLASS_INFOS with type 'a getter = class_type_declaration node -> 'a
-  val typ : class_type node getter
-end
-
-(* Value expressions for the class language *)
-
-module Class_expr : sig
-  type desc =
-    | Constr of longident * type_expr node list
-    (* c
-           ['a1, ..., 'an] c *)
-    | Structure of class_structure node
-    (* object ... end *)
-    | Fun of arg_label * expression node option * pattern node * class_expr node
-    (* fun P -> CE                          (Simple, None)
-       fun ~l:P -> CE                       (Labelled l, None)
-       fun ?l:P -> CE                       (Optional l, None)
-       fun ?l:(P = E0) -> CE                (Optional l, Some E0)
-    *)
-    | Apply of class_expr node * (arg_label * expression node) list
-    (* CE ~l1:E1 ... ~ln:En
-       li can be empty (non labeled argument) or start with '?'
-       (optional argument).
-
-       Invariant: n > 0
-    *)
-    | Let of rec_flag * value_binding node list * class_expr node
-    (* let P1 = E1 and ... and Pn = EN in CE      (flag = Nonrecursive)
-       let rec P1 = E1 and ... and Pn = EN in CE  (flag = Recursive)
-    *)
-    | Constraint of class_expr node * class_type node
-    (* (CE : CT) *)
-    | Extension of extension node
-    (* [%id] *)
-    | Open of open_description node * class_expr node
-    (* let open M in CE *)
-  val desc : class_expr node -> desc
-end
-
-module Class_structure : sig
-  val self : class_structure node -> pattern
-  val fields : class_structure node -> class_field node list
-end
-
-(* object(selfpat) ... end
-   object ... end           (self = Ppat_any)
- *)
-
-module Class_field : sig
-  type kind =
-    | Virtual of type_expr node
-    | Concrete of override_flag * expression node
-
-  type desc =
-    | Inherit of override_flag * class_expr node * string loc option
-    (* inherit CE
-           inherit CE as x
-           inherit! CE
-           inherit! CE as x
-    *)
-    | Val of label loc * mutable_flag * kind
-    (* val x = E
-       val virtual x: T
-    *)
-    | Method of label loc * private_flag * kind
-    (* method x = E            (E can be a Pexp_poly)
-       method virtual x: T     (T can be a Ptyp_poly)
-    *)
-    | Constraint of type_expr node * type_expr node
-    (* constraint T1 = T2 *)
-    | Initializer of expression node
-    (* initializer E *)
-    | Attribute of attribute node
-    (* [@@@id] *)
-    | Extension of extension node
-    (* [%%id] *)
-
-  val desc : class_field node -> desc
-end
-
-module Class_declaration : sig
-  include CLASS_INFOS
-  val expr : class_declaration node -> class_expr node
-end
-
 (** {1 Module language} *)
 
 (* Type expressions for the module language *)
@@ -652,10 +491,6 @@ module Signature_item : sig
     (* open X *)
     | Include of include_description node
     (* include MT *)
-    | Class of class_description node list
-    (* class c1 : ... and ... and cn : ... *)
-    | Class_type of class_type_declaration node list
-    (* class type ct1 = ... and ... and ctn = ... *)
     | Attribute of attribute node
     (* [@@@id] *)
     | Extension of extension node
@@ -750,10 +585,6 @@ module Structure_item : sig
     (* module type S = MT *)
     | Open of open_declaration node
     (* open X *)
-    | Class of class_declaration node list
-    (* class c1 = ... and ... and cn = ... *)
-    | Class_type of class_type_declaration node list
-    (* class type ct1 = ... and ... and ctn = ... *)
     | Include of include_declaration node
     (* include ME *)
     | Attribute of attribute node
@@ -784,7 +615,7 @@ module Phrase : sig
 end
 
 module Directive : sig
-  val name : directive -> string loc
+  val name : directive node -> string loc
   val arg : directive node -> directive_argument node option
 end
 
@@ -832,15 +663,6 @@ module Visitor : sig
     | Type_exception           : type_exception node category
     | Extension_constructor    : extension_constructor node category
     | Extension_constructor_kind : extension_constructor_kind node category
-    | Class_type               : class_type node category
-    | Class_type_field         : class_type_field node category
-    | Class_description        : class_description node category
-    | Class_declaration        : class_declaration node category
-    | Class_type_declaration   : class_type_declaration node category
-    | Class_signature          : class_signature node category
-    | Class_expr               : class_expr node category
-    | Class_field              : class_field node category
-    | Class_structure          : class_structure node category
     | Module_type              : module_type node category
     | Module_declaration       : module_declaration node category
     | Module_substitution      : module_substitution node category
@@ -854,4 +676,3 @@ module Visitor : sig
   type map = { visit: 'a. map -> 'a category -> 'a -> 'a }
   val map : map
 end
-
