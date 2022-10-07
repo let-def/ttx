@@ -47,3 +47,7 @@ type variance =
 type injectivity =
   | Injective
   | NoInjectivity
+
+type module_presence =
+  | Present
+  | Absent

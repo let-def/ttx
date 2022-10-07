@@ -22,10 +22,7 @@ module type CONTEXT = sig
   type t
   val empty : t
   val enter : t -> 'a binder -> 'a info -> t
-
   val lookup : t -> 'a name -> 'a info
-  exception Undefined
-
   val update : t -> 'a name -> 'a info -> t
 
   (* Creating new bindings *)
@@ -39,7 +36,8 @@ module type S = sig
   type 'a binder
   type 'a name
 
-  val name : 'a binder -> 'a name
+  val get_name : 'a binder -> 'a name
+  val get_text : 'a name -> string
   val namespace : 'a name -> 'a namespace
 
   module Make_context(Info: TYPE) :

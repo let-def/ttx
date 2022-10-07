@@ -62,10 +62,8 @@ module Context = struct
       type 'a t = 'a Visitor.decl
   end)
 
-  let raw_fresh = fresh
-  let fresh context info =
-    let binder = fresh context (Visitor.namespace info) in
-    (bind context binder info, binder)
+  let fresh context name info =
+    extend context (Visitor.namespace info) name info
 end
 
 type env = {
@@ -78,76 +76,90 @@ type env = {
 }
 
 module Initial = struct
-  let context = ref Context.empty
-
-  let simple_level vars =
-    let binder = Context.raw_fresh !context Type_level in
+  let simple_level context name vars =
+    let _, binder = Context.reserve context Type_level name in
     let level = Type_level.make binder in
     let vars = List.map (Type_level.fresh level) vars in
     Type_level.freeze level;
     (level, vars)
 
-  let abstract_type vars name =
-    let forall, params = simple_level vars in
+  let abstract_type context vars name =
+    let forall, params = simple_level context "forall" vars in
     let mk_var var = Type_expr.make (Var var) in
-    Type_decl.make ~name
+    Type_decl.make name
       ~forall ~params:(List.map mk_var params)
       ~manifest:None Abstract
 
-  let add decl =
-    let context', binder = Context.fresh !context decl in
-    context := context';
-    name binder
 
-  let update binder decl =
-    context := Context.update !context binder decl
+  let add context text decl =
+    let context, binder = Context.fresh context text decl in
+    (context, get_name binder)
 
-  let int    = add (Type (abstract_type [] "int"))
-  let string = add (Type (abstract_type [] "string"))
-  let char   = add (Type (abstract_type [] "char"))
-  let float  = add (Type (abstract_type [] "float"))
+  let context = Context.empty
 
-  let bool, bool_true, bool_false =
-    let decl = Type_decl.make_undefined () in
-    let name = add (Type decl) in
-    let forall, _ = simple_level [] in
-    let typ = Type_expr.make (Const ([], Path.Ident name)) in
+  let context, int =
+    add context "int" (Type (abstract_type context [] "int"))
+
+  let context, string =
+    add context "string" (Type (abstract_type context [] "string"))
+
+  let context, char =
+    add context "char" (Type (abstract_type context [] "char"))
+
+  let context, float =
+    add context "float" (Type (abstract_type context [] "float"))
+
+  let context, bool, bool_true, bool_false =
+    let context, ident = Context.reserve context Type "bool" in
+    let forall, _ = simple_level context "forall" [] in
+    let typ = Type_expr.make (Const ([], Path.Ident (get_name ident))) in
     let k_true = Constructor.make "true" ~forall (Tuple []) typ in
     let k_false = Constructor.make "false" ~forall (Tuple []) typ in
-    Type_decl.define decl ~name:"bool" ~forall ~params:[] ~manifest:None
-      (Variant [k_true; k_false]);
-    (name, add (Constructor k_true), add (Constructor k_false))
+    let decl =
+      Type_decl.make "bool" ~forall ~params:[] ~manifest:None
+        (Variant [k_true; k_false]);
+    in
+    let context = Context.enter context ident (Type decl) in
+    let context, bool_true  = add context "true"  (Constructor k_true)  in
+    let context, bool_false = add context "false" (Constructor k_false) in
+    (context, get_name ident, bool_true, bool_false)
 
-  let list, list_nil, list_cons =
-    let decl = Type_decl.make_undefined () in
-    let name = add (Type decl) in
-    let forall, vars = simple_level [Some "a"] in
+  let context, list, list_nil, list_cons =
+    let context, ident = Context.reserve context Type "list" in
+    let forall, vars = simple_level context "forall" [Some "a"] in
     let a = Type_expr.make (Var (List.hd vars)) in
-    let typ = Type_expr.make (Const ([a], Path.Ident name)) in
+    let typ = Type_expr.make (Const ([a], Path.Ident (get_name ident))) in
     let k_nil = Constructor.make "[]" ~forall (Tuple []) typ in
     let k_cons = Constructor.make "::" ~forall (Tuple [a; typ]) typ in
-    Type_decl.define decl ~name:"list" ~forall ~params:[a] ~manifest:None
-      (Variant [k_nil; k_cons]);
-    (typ, add (Constructor k_nil), add (Constructor k_cons))
+    let decl =
+      Type_decl.make "list" ~forall ~params:[a] ~manifest:None
+        (Variant [k_nil; k_cons])
+    in
+    let context = Context.enter context ident (Type decl) in
+    let context, list_nil  = add context "[]" (Constructor k_nil)  in
+    let context, list_cons = add context "::" (Constructor k_cons) in
+    (context, get_name ident, list_nil, list_cons)
 
-  let option, option_none, option_some =
-    let decl = Type_decl.make_undefined () in
-    let name = add (Type decl) in
-    let forall, vars = simple_level [Some "a"] in
+  let context, option, option_none, option_some =
+    let context, ident = Context.reserve context Type "option" in
+    let forall, vars = simple_level context "forall" [Some "a"] in
     let a = Type_expr.make (Var (List.hd vars)) in
-    let typ = Type_expr.make (Const ([a], Path.Ident name)) in
-    let k_nil = Constructor.make "None" ~forall (Tuple []) typ in
-    let k_cons = Constructor.make "Some" ~forall (Tuple [a]) typ in
-    Type_decl.define decl ~name:"option" ~forall ~params:[a] ~manifest:None
-      (Variant [k_nil; k_cons]);
-    (typ, add (Constructor k_nil), add (Constructor k_cons))
-
-  let context = !context
+    let typ = Type_expr.make (Const ([a], Path.Ident (get_name ident))) in
+    let k_none = Constructor.make "None" ~forall (Tuple []) typ in
+    let k_some = Constructor.make "Some" ~forall (Tuple [a]) typ in
+    let decl =
+      Type_decl.make "option" ~forall ~params:[a] ~manifest:None
+        (Variant [k_none; k_some])
+    in
+    let context = Context.enter context ident (Type decl) in
+    let context, option_none = add context "None" (Constructor k_none) in
+    let context, option_some = add context "Some" (Constructor k_some) in
+    (context, get_name ident, option_none, option_some)
 end
 
 let rec import_ml_module_path env : Ml.Path.t -> ns_module path = function
   | Pident id ->
-    Path.Ident (name (Ml.Map.get env.ml_modules id))
+    Path.Ident (get_name (Ml.Map.get env.ml_modules id))
   | Pdot (parent, dot) ->
     Path.Dot (import_ml_module_path env parent, dot)
   | Papply _ ->
@@ -156,7 +168,7 @@ let rec import_ml_module_path env : Ml.Path.t -> ns_module path = function
 let import_ml_path (type ns) env (map : ns binder Ml.map)
   : Ml.Path.t -> ns path = function
   | Pident id ->
-    Path.Ident (name (Ml.Map.get map id))
+    Path.Ident (get_name (Ml.Map.get map id))
   | Pdot (parent, dot) ->
     Path.Dot (import_ml_module_path env parent, dot)
   | Papply _ ->
@@ -164,15 +176,15 @@ let import_ml_path (type ns) env (map : ns binder Ml.map)
 
 type type_import_state = {
   table: type_expr Ml.Tytable.t;
-  level: string option Type_level.t;
+  level: Type_level.t;
   mutable suspended: bool;
   parent: type_import_state;
 }
 
-let new_level env =
-  let binder = Context.raw_fresh env.context Type_level in
+let new_level name env =
+  let context, binder = Context.reserve env.context Type_level name in
   let level = Type_level.make binder in
-  let context = Context.bind env.context binder (Type_level level) in
+  let context = Context.enter context binder (Type_level level) in
   let rec self = {
     table = Ml.Tytable.create 7;
     level;
@@ -181,11 +193,11 @@ let new_level env =
   } in
   (self, {env with context})
 
-let enter st env =
+let enter name st env =
   assert (not st.suspended);
-  let binder = Context.raw_fresh env.context Type_level in
+  let context, binder = Context.reserve env.context Type_level name in
   let level = Type_level.make binder in
-  let context = Context.bind env.context binder (Type_level level) in
+  let context = Context.enter context binder (Type_level level) in
   st.suspended <- true;
   let st' = {table = st.table; level; suspended = false; parent = st} in
   (st', {env with context})
@@ -242,7 +254,7 @@ let rec import_type_expr st env (t : Ml.Types.type_expr) : type_expr =
     t'
 
 let import_value_description env name (vd : Ml.Types.value_description) =
-  let st, env = new_level env in
+  let st, env = new_level "forall" env in
   let typ = import_type_expr st env vd.val_type in
   let desc = match vd.val_kind with
     | Val_reg -> Value_desc.Regular
@@ -295,12 +307,12 @@ let import_constructor_decl
   in
   Constructor.make (Ident.name cd.cd_id) ~forall arguments result
 
-let import_type_declaration env binder (ident, (td : Ml.Types.type_declaration)) =
-  let st, env_inner = new_level env in
+let import_type_declaration env (binder, ident, (td : Ml.Types.type_declaration)) =
+  let st, env_inner = new_level "forall" env in
   let params = List.map (import_type_expr st env_inner) td.type_params in
   let forall = leave st in
   let manifest = Option.map (import_type_expr st env_inner) td.type_manifest in
-  let desc =
+  let env, desc =
     match td.type_kind with
     | Type_abstract ->
       (env, Type_decl.Abstract)
@@ -308,24 +320,43 @@ let import_type_declaration env binder (ident, (td : Ml.Types.type_declaration))
       (env, Type_decl.Open)
     | Type_variant (cstrs, _repr) ->
       let decls = List.map
-          (import_constructor_decl st forall params (name binder) env_inner)
+          (import_constructor_decl st forall params (get_name binder) env_inner)
           cstrs
       in
       let env = List.fold_left2 (fun env decl cd ->
-          let context, name = Context.fresh env.context (Constructor decl) in
-          let ml_cstrs = Ml.Map.add env.ml_cstrs cd.Ml.Types.cd_id name in
+          let name = Ident.name cd.Ml.Types.cd_id in
+          let context, name = Context.fresh env.context name (Constructor decl) in
+          let ml_cstrs = Ml.Map.add env.ml_cstrs cd.cd_id name in
           {env with context; ml_cstrs}
         ) env decls cstrs
       in
       (env, Type_decl.Variant decls)
     | Type_record (_labels, _repr) ->
       assert false (*TODO*)
-let define desc =
-  Type_decl.make ~name:(Ident.name ident) ~forall ~params ~manifest desc
   in
+  let decl = Type_decl.make (Ident.name ident) ~forall ~params ~manifest desc in
+  let context = Context.enter env.context binder (Type decl) in
+  ({env with context}, (binder, decl))
 
 let import_signature_ : (env -> Types.signature -> signature) ref =
   ref (fun _ -> assert false)
+
+let import_type_defs env vis rec_ defs =
+  let vis = import_visibility vis in
+  let rec_ = import_rec_flag rec_ in
+  let (context, ml_types), defs =
+    List.fold_left_map
+      (fun (context, ml_types) (id, td) ->
+         let context, binder = Context.reserve context Type (Ident.name id) in
+         let ml_types = Ml.Map.add ml_types id binder in
+         (context, ml_types), (binder, id, td)
+      )
+      (env.context, env.ml_types) defs
+  in
+  let env = {env with ml_types; context} in
+  let env, decls = List.fold_left_map import_type_declaration env defs in
+  let item = Signature_item.make vis (Type (rec_, decls)) in
+  (env, item)
 
 let rec import_module_type env (mt : Ml.Types.module_type) =
   Module_type.make (match mt with
@@ -345,58 +376,46 @@ let rec import_module_type env (mt : Ml.Types.module_type) =
           | None ->
             env, Functor_parameter.Named (None, mt')
           | Some n ->
-            let md = Module_decl.make (Ident.name n) mt' in
-            let context, binder = Context.fresh env.context (Module md) in
+            let name = Ident.name n in
+            let md = Module_decl.make name mt' in
+            let context, binder = Context.fresh env.context name (Module md) in
             let ml_modules = Ml.Map.add env.ml_modules n binder in
-            let env = {env with ml_modules; context} in
+            let env = {env with context; ml_modules} in
             env, Functor_parameter.Named (Some binder, mt')
       in
       Functor (Functor_parameter.make fp, import_module_type env mt)
     )
 
+let import_module env (binder, id, _mp, (md : Ml.Types.module_declaration)) =
+  let mty = import_module_type env md.md_type in
+  let decl = Module_decl.make (Ident.name id) mty in
+  let context = Context.enter env.context binder (Module decl) in
+  ({env with context}, (binder, decl))
 
-let import_type_defs env vis rec_ defs =
+let import_modules env vis rec_ defs =
   let vis = import_visibility vis in
   let rec_ = import_rec_flag rec_ in
-  let group = Context.group_empty env.context in
-  let group, binders =
+  let (context, ml_modules), defs =
     List.fold_left_map
-      (fun group (id, _td) -> Context.group_fresh group Type (Ident.name id))
-      group defs
+      (fun (context, ml_modules) (id, mp, md) ->
+         let context, binder = Context.reserve context Module (Ident.name id) in
+         let ml_modules = Ml.Map.add ml_modules id binder in
+         (context, ml_modules), (binder, id, mp, md)
+      )
+      (env.context, env.ml_modules) defs
   in
-  let ml_types =
-    List.fold_left2
-      (fun map binder (id, _) -> Ml.Map.add map id binder)
-      env.ml_types binders defs
-  in
-  let env = {env with ml_types} in
-  let env = List.fold_left2 import_type_declaration env binders defs in
-  let item = Signature_item.make vis (Type (rec_, decls)) in
+  let env = {env with context; ml_modules} in
+  let env, decls = List.fold_left_map import_module env defs in
+  let item = Signature_item.make vis (Module (rec_, decls)) in
   (env, item)
 
-let import_module env = ()
-
-let import_modules env vis rec_ mods =
-  let vis = import_visibility vis in
-  let rec_ = import_rec_flag rec_ in
-  let env, decls = List.fold_left_map (fun env (id, _mp, _md) ->
-      let decl = Module_decl.make_undefined () in
-      let context, binder = Context.fresh env.context (Type decl) in
-      let ml_types = Ml.Map.add env.ml_types id binder in
-      let env = {env with context; ml_types} in
-      (env, (binder, decl))
-    ) env mods
-  in
-  let env = List.fold_left2 import_type_declaration env decls defs in
-  let item = Signature_item.make vis (Type (rec_, decls)) in
-  (env, item)
-
-let import_signature_items env = function
+let import_signature_item env = function
   | [] -> assert false
   | Types.Sig_value (id, vd, vis) :: rest ->
+    let name = Ident.name id in
     let vis = import_visibility vis in
-    let vd = import_value_description env (Ident.name id) vd in
-    let context, binder = Context.fresh env.context (Value vd) in
+    let vd = import_value_description env name vd in
+    let context, binder = Context.fresh env.context name (Value vd) in
     let ml_values = Ml.Map.add env.ml_values id binder in
     let env = {env with context; ml_values} in
     let item = Signature_item.make vis (Value (binder, vd)) in
@@ -408,13 +427,27 @@ let import_signature_items env = function
   | Types.Sig_module (id, mp, md, rec_, vis) :: rest ->
     let defs, rest = gather_recursive_modules [(id, mp, md)] vis rest in
     let env, item = import_modules env vis rec_ defs in
-    (emv, item, rest)
-  | Types.Sig_modtype (_id, _mtd, _vis) :: _rest ->
-    import_module_type
-    assert false
+    (env, item, rest)
+  | Types.Sig_modtype (id, mtd, vis) :: rest ->
+    let name = Ident.name id in
+    let vis = import_visibility vis in
+    let decl =
+      Module_type_decl.make
+        (Option.map (import_module_type env) mtd.mtd_type)
+    in
+    let context, binder = Context.fresh env.context name (Module_type decl) in
+    let item = Signature_item.make vis (Module_type (binder, decl)) in
+    let ml_modtypes = Ml.Map.add env.ml_modtypes id binder in
+    let env = {env with context; ml_modtypes} in
+    (env, item, rest)
   | (Types.Sig_typext _ | Types.Sig_class _ | Types.Sig_class_type _) :: _ ->
     assert false
 
-  (* Sig_typext of Ident.t * extension_constructor * ext_status * visibility*)
-  (* Sig_class of Ident.t * class_declaration * rec_status * visibility*)
-  (* Sig_class_type of Ident.t * class_type_declaration * rec_status * visibility*)
+let import_signature_items env items =
+  let rec aux env acc = function
+    | [] -> env, List.rev acc
+    | items ->
+      let env, item, rest = import_signature_item env items in
+      aux env (item :: acc) rest
+  in
+  aux env [] items

@@ -39,10 +39,10 @@ type constructor
 type label_decl
 type type_decl
 type value_desc
-type module_expr
 type module_type
 type functor_parameter
 type module_decl
+type module_type_decl
 type signature
 type signature_item
 
@@ -85,9 +85,9 @@ end
 
 module Type_scheme : sig
   type t = type_scheme
+  val make : type_level -> type_expr -> t
   val forall : t -> type_level
   val expr : t -> type_expr
-  val make : type_level -> type_expr -> t
 end
 
 module Value_desc : sig
@@ -119,13 +119,12 @@ end
 
 module Label_decl : sig
   type t = label_decl
-  val make : string -> ns_type binder list -> record:type_expr -> field:type_expr -> t
+  val make : string -> mutable_flag -> forall:type_level -> record:type_expr -> field:type_expr -> t
   val name : t -> string
   val forall : t -> type_level
   val mutability : t -> mutable_flag
-  val parameters : t -> ns_type binder list
-  val record_type : t -> type_expr
-  val field_type : t -> type_expr
+  val record : t -> type_expr
+  val field : t -> type_expr
 end
 
 module Type_decl : sig
@@ -133,12 +132,12 @@ module Type_decl : sig
 
   type desc =
     | Abstract
-    | Record
+    | Record of label_decl list
     | Variant of constructor list
     | Open
 
   val make :
-    name:string ->
+    string ->
     forall:type_level ->
     params:type_expr list ->
     manifest:type_expr option ->
@@ -146,11 +145,9 @@ module Type_decl : sig
 
   val name : t -> string
   val forall : t -> type_level
-  val parameters : t -> type_expr list
+  val params : t -> type_expr list
+  val manifest : t -> type_expr option
   val desc : t -> desc
-
-  exception Already_defined
-  exception Undefined
 end
 
 module Functor_parameter : sig
@@ -178,8 +175,14 @@ end
 module Module_decl : sig
   type t = module_decl
   val name : t -> string
-  val typ : t -> module_type
   val make : string -> module_type -> t
+  val typ : t -> module_type
+end
+
+module Module_type_decl : sig
+  type t = module_type_decl
+  val make : module_type option -> t
+  val typ : t -> module_type option
 end
 
 module Signature_item : sig
@@ -191,9 +194,9 @@ module Signature_item : sig
 
   type desc =
     | Value of ns_value binder * value_desc
-    | Type of rec_flag * binding_group * (ns_type binder * type_decl) list
-    | Module of rec_flag * binding_group * (ns_module binder * module_decl) list
-    | Module_type of ns_module_type binder
+    | Type of rec_flag * (ns_type binder * type_decl) list
+    | Module of rec_flag * (ns_module binder * module_decl) list
+    | Module_type of ns_module_type binder * module_type_decl
 
   val desc : t -> desc
   val visibility : t -> visibility
@@ -202,20 +205,35 @@ end
 
 module Signature : sig
   type t = signature
-
+  val make : Signature_item.t list -> t
+  val items : t -> Signature_item.t list
 end
 
 module Visitor : sig
   type 'a category =
+    | Type_expr   : type_expr category
+    | Type_level  : type_level category
+    | Type_scheme : type_scheme category
+    | Constructor : constructor category
+    | Label_decl  : label_decl category
+    | Type_decl   : type_decl category
+    | Value_desc  : value_desc category
+    | Module_type : module_type category
+    | Functor_parameter : functor_parameter category
+    | Module_decl : module_decl category
+    | Module_type_decl : module_type_decl category
+    | Signature   : signature category
     | Signature_item : signature_item category
 
   type 'a decl =
     | Value       : value_desc -> ns_value decl
     | Type        : type_decl -> ns_type decl
+    | Type_level  : type_level -> ns_type_level decl
+    | Constructor : constructor -> ns_constructor decl
+    | Label       : label_decl -> ns_label decl
     | Module      : module_decl -> ns_module decl
     | Import      : string * Digest.t -> ns_module decl
-    | Constructor : constructor -> ns_constructor decl
-    | Type_level  : type_level -> ns_type_level decl
+    | Module_type : module_type_decl -> ns_module_type decl
 
   val namespace : 'a decl -> 'a namespace
   (*let namespace (type a) : a decl -> a namespace = function
