@@ -3,18 +3,25 @@ open Ttx_def
 type ns_value = private Ns_value
 type ns_type = private Ns_type
 type ns_type_level = private Ns_type_level
-type ns_constructor = private Ns_constructor
-type ns_label = private Ns_label
 type ns_module = private Ns_module
 type ns_module_type = private Ns_module_type
+
+module Vector : sig
+  type 'a t
+  val of_array : 'a array -> 'a t
+  val to_array : 'a array -> 'a t
+  val unsafe_of_array : 'a array -> 'a t
+  val unsafe_to_array : 'a array -> 'a t
+  val length : 'a t -> int
+  val get : 'a t -> int -> 'a
+end
+type 'a vector = 'a Vector.t
 
 module Namespace : sig
   type 'a t =
     | Value : ns_value t
     | Type : ns_type t
     | Type_level : ns_type_level t
-    | Constructor : ns_constructor t
-    | Label : ns_label t
     | Module : ns_module t
     | Module_type : ns_module_type t
   val to_string : 'a t -> string
@@ -106,11 +113,17 @@ end
 module Constructor : sig
   type t = constructor
 
-  type arguments =
-    | Tuple of type_expr list
-    | Record of label_decl list
+  type nonrec path = {
+    typ: ns_type path;
+    index: int;
+    name: string;
+  }
 
-  val make : string -> forall:type_level -> arguments -> type_expr -> t
+  type arguments =
+    | Tuple of type_expr vector
+    | Record of label_decl vector
+
+  val make : path -> forall:type_level -> arguments -> type_expr -> t
   val name : t -> string
   val forall : t -> type_level
   val arguments : t -> arguments
@@ -119,7 +132,20 @@ end
 
 module Label_decl : sig
   type t = label_decl
-  val make : string -> mutable_flag -> forall:type_level -> record:type_expr -> field:type_expr -> t
+
+  type nonrec path =
+    | Of_record of {
+        typ: ns_type path;
+        index: int;
+        name: string;
+      }
+    | Of_inline_record of {
+        cstr: Constructor.path;
+        index: int;
+        name: string;
+      }
+
+  val make : path -> mutable_flag -> forall:type_level -> record:type_expr -> field:type_expr -> t
   val name : t -> string
   val forall : t -> type_level
   val mutability : t -> mutable_flag
@@ -229,8 +255,6 @@ module Visitor : sig
     | Value       : value_desc -> ns_value decl
     | Type        : type_decl -> ns_type decl
     | Type_level  : type_level -> ns_type_level decl
-    | Constructor : constructor -> ns_constructor decl
-    | Label       : label_decl -> ns_label decl
     | Module      : module_decl -> ns_module decl
     | Import      : string * Digest.t -> ns_module decl
     | Module_type : module_type_decl -> ns_module_type decl
