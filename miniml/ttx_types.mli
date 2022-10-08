@@ -43,7 +43,7 @@ type type_expr
 type type_level
 type type_scheme
 type constructor
-type label_decl
+type label
 type type_decl
 type value_desc
 type module_type
@@ -103,11 +103,11 @@ module Value_desc : sig
     | Regular
     | Primitive
 
-  val name : t -> string
+  val binder : t -> ns_value binder
   val typ : t -> type_scheme
   val desc : t -> desc
 
-  val make : string -> type_scheme -> desc -> t
+  val make : ns_value binder -> type_scheme -> desc -> t
 end
 
 module Constructor : sig
@@ -121,32 +121,30 @@ module Constructor : sig
 
   type arguments =
     | Tuple of type_expr vector
-    | Record of label_decl vector
+    | Record of label vector
 
   val make : path -> forall:type_level -> arguments -> type_expr -> t
-  val name : t -> string
+  val path : t -> path
   val forall : t -> type_level
   val arguments : t -> arguments
   val result : t -> type_expr
 end
 
-module Label_decl : sig
-  type t = label_decl
+module Label : sig
+  type t = label
 
-  type nonrec path =
-    | Of_record of {
-        typ: ns_type path;
-        index: int;
-        name: string;
-      }
-    | Of_inline_record of {
-        cstr: Constructor.path;
-        index: int;
-        name: string;
-      }
+  type kind =
+    | Record of ns_type path
+    | Inline_record of Constructor.path
+
+  type nonrec path = {
+    kind: kind;
+    index: int;
+    name: string;
+  }
 
   val make : path -> mutable_flag -> forall:type_level -> record:type_expr -> field:type_expr -> t
-  val name : t -> string
+  val path : t -> path
   val forall : t -> type_level
   val mutability : t -> mutable_flag
   val record : t -> type_expr
@@ -158,18 +156,18 @@ module Type_decl : sig
 
   type desc =
     | Abstract
-    | Record of label_decl list
+    | Record of label list
     | Variant of constructor list
     | Open
 
   val make :
-    string ->
+    ns_type binder ->
     forall:type_level ->
     params:type_expr list ->
     manifest:type_expr option ->
     desc -> t
 
-  val name : t -> string
+  val binder : t -> ns_type binder
   val forall : t -> type_level
   val params : t -> type_expr list
   val manifest : t -> type_expr option
@@ -180,7 +178,8 @@ module Functor_parameter : sig
   type t = functor_parameter
   type desc =
     | Unit
-    | Named of ns_module binder option * module_type
+    | Named of module_decl
+    | Anonymous of module_type
 
   val make : desc -> t
   val desc : t -> desc
@@ -200,14 +199,15 @@ end
 
 module Module_decl : sig
   type t = module_decl
-  val name : t -> string
-  val make : string -> module_type -> t
+  val make : ns_module binder -> module_type -> t
+  val binder : t -> ns_module binder
   val typ : t -> module_type
 end
 
 module Module_type_decl : sig
   type t = module_type_decl
-  val make : module_type option -> t
+  val make : ns_module_type binder -> module_type option -> t
+  val binder : t -> ns_module_type binder
   val typ : t -> module_type option
 end
 
@@ -219,10 +219,10 @@ module Signature_item : sig
     | Hidden
 
   type desc =
-    | Value of ns_value binder * value_desc
-    | Type of rec_flag * (ns_type binder * type_decl) list
-    | Module of rec_flag * (ns_module binder * module_decl) list
-    | Module_type of ns_module_type binder * module_type_decl
+    | Value of value_desc
+    | Type of rec_flag * type_decl list
+    | Module of rec_flag * module_decl list
+    | Module_type of module_type_decl
 
   val desc : t -> desc
   val visibility : t -> visibility
@@ -241,7 +241,7 @@ module Visitor : sig
     | Type_level  : type_level category
     | Type_scheme : type_scheme category
     | Constructor : constructor category
-    | Label_decl  : label_decl category
+    | Label       : label category
     | Type_decl   : type_decl category
     | Value_desc  : value_desc category
     | Module_type : module_type category
@@ -259,19 +259,29 @@ module Visitor : sig
     | Import      : string * Digest.t -> ns_module decl
     | Module_type : module_type_decl -> ns_module_type decl
 
+  type 'a enter_category =
+    | Enter_type_scheme : type_scheme enter_category
+    | Enter_constructor : constructor enter_category
+    | Enter_label : label enter_category
+    | Enter_type_decl : type_decl enter_category
+    | Enter_functor_parameter : (functor_parameter * module_type) enter_category
+    | Enter_signature_items : signature_item list enter_category
+
   val namespace : 'a decl -> 'a namespace
-  (*let namespace (type a) : a decl -> a namespace = function
-    | Value  _ -> Value
-    | Type   _ -> Type
-    | Module _ -> Module
-    | Import _ -> Module*)
 
   type 'env bind = { bind: 'a. 'a binder -> 'a decl -> 'env -> 'env }
-  val enter : 'env bind -> 'a category -> 'a -> 'env -> 'env
+  val enter : 'env bind -> 'a enter_category -> 'a -> 'env -> 'env
 
-  type 'env iter = { iter: 'a. 'env iter -> 'env -> 'a category -> 'a -> unit }
-  val iter : 'env iter -> 'env -> 'a category -> 'a -> unit
+  type 'env iter = {
+    syntax: 'a. 'env iter -> 'env -> 'a category -> 'a -> unit;
+    enter: 'a. 'env iter -> 'env -> 'a enter_category -> 'a -> unit;
+  }
+  val iter : 'env iter
 
-  type 'env map = { map: 'a. 'env map -> 'env -> 'a category -> 'a -> 'a }
-  val map : 'env map -> 'env -> 'a category -> 'a -> 'a
+  type 'env map = {
+    syntax: 'a. 'env map -> 'env -> 'a category -> 'a -> 'a;
+    enter: 'a. 'env map -> 'env -> 'a enter_category -> 'a -> 'a;
+  }
+  val map : 'env map
+
 end

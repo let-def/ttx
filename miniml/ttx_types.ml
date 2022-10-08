@@ -3,18 +3,38 @@ open Ttx_def
 type ns_value = private Ns_value
 type ns_type = private Ns_type
 type ns_type_level = private Ns_type_level
-type ns_constructor = private Ns_constructor
-type ns_label = private Ns_label
 type ns_module = private Ns_module
 type ns_module_type = private Ns_module_type
+
+module Vector : sig
+  type 'a t
+  val of_list : 'a list -> 'a t
+  val to_list : 'a t -> 'a list
+  val of_array : 'a array -> 'a t
+  val to_array : 'a array -> 'a t
+  val unsafe_of_array : 'a array -> 'a t
+  val unsafe_to_array : 'a array -> 'a t
+  val length : 'a t -> int
+  val get : 'a t -> int -> 'a
+end = struct
+  type 'a t = 'a array
+  let of_list = Array.of_list
+  let to_list = Array.to_list
+  let of_array = Array.copy
+  let to_array = Array.copy
+  let unsafe_of_array x = x
+  let unsafe_to_array x = x
+  let length = Array.length
+  let get = Array.get
+end
+
+type 'a vector = 'a Vector.t
 
 module Namespace = struct
   type 'a t =
     | Value : ns_value t
     | Type : ns_type t
     | Type_level : ns_type_level t
-    | Constructor : ns_constructor t
-    | Label : ns_label t
     | Module : ns_module t
     | Module_type : ns_module_type t
   let order (type a b) (a : a t) (b : b t) : (a, b) Context.type_ordering =
@@ -22,19 +42,15 @@ module Namespace = struct
     | Value       , Value       -> Eq
     | Type        , Type        -> Eq
     | Type_level  , Type_level  -> Eq
-    | Constructor , Constructor -> Eq
-    | Label       , Label       -> Eq
     | Module      , Module      -> Eq
     | Module_type , Module_type -> Eq
-    | (Value|Type|Type_level|Constructor|Label|Module|Module_type), _ ->
+    | (Value|Type|Type_level|Module|Module_type), _ ->
       let c = compare (Obj.repr a) (Obj.repr b) in
       if c < 0 then Lt else Gt
   let to_string : type a. a t -> string = function
     | Value       -> "value"
     | Type        -> "type"
     | Type_level  -> "type variables"
-    | Constructor -> "constructor"
-    | Label       -> "label"
     | Module      -> "module"
     | Module_type -> "module type"
 end
@@ -211,52 +227,77 @@ module Value_desc : sig
     | Regular
     | Primitive
 
-  val name : t -> string
+  val binder : t -> ns_value binder
   val typ : t -> Type_scheme.t
   val desc : t -> desc
 
-  val make : string -> Type_scheme.t -> desc -> t
+  val make : ns_value binder -> Type_scheme.t -> desc -> t
 end = struct
   type desc =
     | Regular
     | Primitive
 
   type t = {
-    name: string;
+    binder: ns_value binder;
     typ: Type_scheme.t;
     desc: desc;
   }
 
-  let name t = t.name
+  let binder t = t.binder
   let typ t = t.typ
   let desc t = t.desc
 
-  let make name typ desc = {name; typ; desc}
+  let make binder typ desc = {binder; typ; desc}
 end
 
-module Label_decl : sig
+type nonrec constructor_path = {
+  typ: ns_type path;
+  index: int;
+  name: string;
+}
+
+module Label : sig
   type t
-  val make :
-    string -> mutable_flag -> forall:Type_level.t ->
-    record:Type_expr.t -> field:Type_expr.t -> t
-  val name : t -> string
+
+  type kind =
+    | Record of ns_type path
+    | Inline_record of constructor_path
+
+  type nonrec path = {
+    kind: kind;
+    index: int;
+    name: string;
+  }
+
+  val make : path -> mutable_flag -> forall:Type_level.t -> record:Type_expr.t -> field:Type_expr.t -> t
+  val path : t -> path
   val forall : t -> Type_level.t
   val mutability : t -> mutable_flag
   val record : t -> Type_expr.t
   val field : t -> Type_expr.t
 end = struct
-  type t = {
+  type kind =
+    | Record of ns_type path
+    | Inline_record of constructor_path
+
+  type nonrec path = {
+    kind: kind;
+    index: int;
     name: string;
+  }
+
+  type t = {
+    path: path;
     forall: Type_level.t;
     mutability: mutable_flag;
     record: Type_expr.t;
     field: Type_expr.t;
   }
 
-  let make name mutability ~forall ~record ~field =
-    { name; forall; mutability; record; field }
+  let make path mutability ~forall ~record ~field =
+    { path; forall; mutability; record; field }
 
-  let name       t = t.name
+  let path       t = t.path
   let forall     t = t.forall
   let mutability t = t.mutability
   let record     t = t.record
@@ -268,29 +309,41 @@ module Constructor : sig
 
   type arguments =
     | Tuple of Type_expr.t list
-    | Record of Label_decl.t list
+    | Record of Label.t list
 
-  val make : string -> forall:Type_level.t -> arguments -> Type_expr.t -> t
-  val name : t -> string
+  type nonrec path = constructor_path = {
+    typ: ns_type path;
+    index: int;
+    name: string;
+  }
+
+  val make : path -> forall:Type_level.t -> arguments -> Type_expr.t -> t
+  val path : t -> path
   val forall : t -> Type_level.t
   val arguments : t -> arguments
   val result : t -> Type_expr.t
 end = struct
+  type nonrec path = constructor_path = {
+    typ: ns_type path;
+    index: int;
+    name: string;
+  }
+
   type arguments =
     | Tuple of Type_expr.t list
-    | Record of Label_decl.t list
+    | Record of Label.t list
 
   type t = {
-    name: string;
+    path: path;
     forall: Type_level.t;
     arguments: arguments;
     result: Type_expr.t;
   }
 
-  let make name ~forall arguments result =
-    {name; forall; arguments; result}
+  let make path ~forall arguments result =
+    {path; forall; arguments; result}
 
-  let name      t = t.name
+  let path      t = t.path
   let forall    t = t.forall
   let arguments t = t.arguments
   let result    t = t.result
@@ -300,18 +353,18 @@ module Type_decl : sig
   type t
   type desc =
     | Abstract
-    | Record of Label_decl.t list
+    | Record of Label.t list
     | Variant of Constructor.t list
     | Open
 
   val make :
-    string ->
+    ns_type binder ->
     forall:Type_level.t ->
     params:Type_expr.t list ->
     manifest:Type_expr.t option ->
     desc -> t
 
-  val name : t -> string
+  val binder : t -> ns_type binder
   val forall : t -> Type_level.t
   val params : t -> Type_expr.t list
   val manifest : t -> Type_expr.t option
@@ -319,22 +372,22 @@ module Type_decl : sig
 end = struct
   type desc =
     | Abstract
-    | Record of Label_decl.t list
+    | Record of Label.t list
     | Variant of Constructor.t list
     | Open
 
   type t = {
-    name: string;
+    binder: ns_type binder;
     forall: Type_level.t;
     params: Type_expr.t list;
     manifest: Type_expr.t option;
     desc: desc;
   }
 
-  let make name ~forall ~params ~manifest desc =
-    {name; forall; params; manifest; desc}
+  let make binder ~forall ~params ~manifest desc =
+    {binder; forall; params; manifest; desc}
 
-  let name   t = t.name
+  let binder t = t.binder
   let forall t = t.forall
   let params t = t.params
   let desc   t = t.desc
@@ -368,7 +421,8 @@ and Functor_parameter : sig
   type t
   type desc =
     | Unit
-    | Named of ns_module binder option * Module_type.t
+    | Named of Module_decl.t
+    | Anonymous of Module_type.t
 
   val make : desc -> t
   val desc : t -> desc
@@ -377,7 +431,8 @@ end = struct
 
   and desc =
     | Unit
-    | Named of ns_module binder option * Module_type.t
+    | Named of Module_decl.t
+    | Anonymous of Module_type.t
 
   let make x = x
   let desc x = x
@@ -386,27 +441,25 @@ end
 and Module_decl : sig
   type t
 
-  val make : string -> Module_type.t -> t
-  val name : t -> string
+  val make : ns_module binder -> Module_type.t -> t
+  val binder : t -> ns_module binder
   val typ : t -> Module_type.t
 end = struct
-  type t = {
-    name: string;
-    typ: Module_type.t;
-  }
-
-  let make name typ = {name; typ}
-  let name t = t.name
+  type t = { binder: ns_module binder; typ: Module_type.t }
+  let make binder typ = {binder; typ}
+  let binder t = t.binder
   let typ t = t.typ
 end
 
 and Module_type_decl : sig
   type t
-  val make : Module_type.t option -> t
+  val make : ns_module_type binder -> Module_type.t option -> t
+  val binder : t -> ns_module_type binder
   val typ : t -> Module_type.t option
 end = struct
-  type t = { typ: Module_type.t option }
-  let make typ = { typ }
+  type t = { binder: ns_module_type binder; typ: Module_type.t option }
+  let make binder typ = { binder; typ }
+  let binder t = t.binder
   let typ t = t.typ
 end
 
@@ -418,10 +471,10 @@ and Signature_item : sig
     | Hidden
 
   type desc =
-    | Value of ns_value binder * Value_desc.t
-    | Type of rec_flag * (ns_type binder * Type_decl.t) list
-    | Module of rec_flag * (ns_module binder * Module_decl.t) list
-    | Module_type of ns_module_type binder * Module_type_decl.t
+    | Value of Value_desc.t
+    | Type of rec_flag * Type_decl.t list
+    | Module of rec_flag * Module_decl.t list
+    | Module_type of Module_type_decl.t
 
   val desc : t -> desc
   val visibility : t -> visibility
@@ -432,10 +485,10 @@ end = struct
     | Hidden
 
   type desc =
-    | Value of ns_value binder * Value_desc.t
-    | Type of rec_flag * (ns_type binder * Type_decl.t) list
-    | Module of rec_flag * (ns_module binder * Module_decl.t) list
-    | Module_type of ns_module_type binder * Module_type_decl.t
+    | Value of Value_desc.t
+    | Type of rec_flag * Type_decl.t list
+    | Module of rec_flag * Module_decl.t list
+    | Module_type of Module_type_decl.t
 
   type t = {vis: visibility; desc: desc}
 
@@ -458,7 +511,7 @@ type type_expr         = Type_expr.t
 type type_level        = Type_level.t
 type type_scheme       = Type_scheme.t
 type constructor       = Constructor.t
-type label_decl        = Label_decl.t
+type label             = Label.t
 type type_decl         = Type_decl.t
 type value_desc        = Value_desc.t
 type module_type       = Module_type.t
@@ -469,12 +522,22 @@ type signature         = Signature.t
 type signature_item    = Signature_item.t
 
 module Visitor : sig
+  type 'a binding =
+    | Value       : value_desc -> ns_value binding
+    | Type        : type_decl -> ns_type binding
+    | Type_level  : type_level -> ns_type_level binding
+    | Module      : module_decl -> ns_module binding
+    | Import      : string * Digest.t -> ns_module binding
+    | Module_type : module_type_decl -> ns_module_type binding
+
+  val namespace : 'a binding -> 'a namespace
+
   type 'a category =
     | Type_expr   : type_expr category
     | Type_level  : type_level category
     | Type_scheme : type_scheme category
     | Constructor : constructor category
-    | Label_decl  : label_decl category
+    | Label       : label category
     | Type_decl   : type_decl category
     | Value_desc  : value_desc category
     | Module_type : module_type category
@@ -484,375 +547,413 @@ module Visitor : sig
     | Signature   : signature category
     | Signature_item : signature_item category
 
-  type 'a decl =
-    | Value       : value_desc -> ns_value decl
-    | Type        : type_decl -> ns_type decl
-    | Type_level  : type_level -> ns_type_level decl
-    | Constructor : constructor -> ns_constructor decl
-    | Label       : label_decl -> ns_label decl
-    | Module      : module_decl -> ns_module decl
-    | Import      : string * Digest.t -> ns_module decl
-    | Module_type : module_type_decl -> ns_module_type decl
+  type ('a, 'b) enter_category =
+    | Enter_type_scheme : (unit, type_scheme) enter_category
+    | Enter_constructor : (unit, constructor) enter_category
+    | Enter_label : (unit, label) enter_category
+    | Enter_type_decl : (unit, type_decl) enter_category
+    | Enter_functor_parameter : (functor_parameter, module_type) enter_category
+    | Enter_signature_items : (unit, signature_item list) enter_category
 
-  val namespace : 'a decl -> 'a namespace
-  (*let namespace (type a) : a decl -> a namespace = function
-    | Value  _ -> Value
-    | Type   _ -> Type
-    | Module _ -> Module
-    | Import _ -> Module*)
+  type 'env bind = { bind: 'a. 'a binding -> 'env -> 'env }
+  val enter : 'env bind -> ('a, 'b) enter_category -> 'a -> 'b -> 'env -> 'env
 
-  type 'env bind = { bind: 'a. 'a binder -> 'a decl -> 'env -> 'env }
-  val enter : 'env bind -> 'a category -> 'a -> 'env -> 'env
+  type 'env iter = {
+    syntax: 'a. 'env iter -> 'env -> 'a category -> 'a -> unit;
+    enter: 'a 'b. 'env iter -> 'env -> ('a, 'b) enter_category -> 'a -> 'b -> unit;
+  }
+  val iter : 'env iter
 
-  type 'env iter = { iter: 'a. 'env iter -> 'env -> 'a category -> 'a -> unit }
-  val iter : 'env iter -> 'env -> 'a category -> 'a -> unit
+  type 'env map = {
+    syntax: 'a. 'env map -> 'env -> 'a category -> 'a -> 'a;
+    enter: 'a 'b. 'env map -> 'env -> ('a, 'b) enter_category -> 'a -> 'b -> 'b;
+  }
+  val map : 'env map
 
-  type 'env map = { map: 'a. 'env map -> 'env -> 'a category -> 'a -> 'a }
-  val map : 'env map -> 'env -> 'a category -> 'a -> 'a
 end = struct
-  type 'a category =
-    | Type_expr   : type_expr category
-    | Type_level  : type_level category
-    | Type_scheme : type_scheme category
-    | Constructor : constructor category
-    | Label_decl  : label_decl category
-    | Type_decl   : type_decl category
-    | Value_desc  : value_desc category
-    | Module_type : module_type category
-    | Functor_parameter : functor_parameter category
-    | Module_decl : module_decl category
-    | Module_type_decl : module_type_decl category
-    | Signature   : signature category
-    | Signature_item : signature_item category
+  type 'a binding =
+    | Value       : value_desc -> ns_value binding
+    | Type        : type_decl -> ns_type binding
+    | Type_level  : type_level -> ns_type_level binding
+    | Module      : module_decl -> ns_module binding
+    | Import      : string * Digest.t -> ns_module binding
+    | Module_type : module_type_decl -> ns_module_type binding
 
-  type 'a decl =
-    | Value       : value_desc -> ns_value decl
-    | Type        : type_decl -> ns_type decl
-    | Type_level  : type_level -> ns_type_level decl
-    | Constructor : constructor -> ns_constructor decl
-    | Label       : label_decl -> ns_label decl
-    | Module      : module_decl -> ns_module decl
-    | Import      : string * Digest.t -> ns_module decl
-    | Module_type : module_type_decl -> ns_module_type decl
-
-  let namespace (type a) : a decl -> a namespace = function
+  let namespace (type a) : a binding -> a namespace = function
     | Value  _ -> Value
     | Type   _ -> Type
     | Module _ -> Module
     | Import _ -> Module
     | Type_level _ -> Type_level
-    | Constructor _ -> Constructor
-    | Label _ -> Label
     | Module_type _ -> Module_type
 
-  type 'env bind = { bind: 'a. 'a binder -> 'a decl -> 'env -> 'env }
-  let enter (type a env) (bind : env bind)
-      (category : a category) (value : a) (env : env) : env =
+  type 'a category =
+    | Type_expr   : type_expr category
+    | Type_level  : type_level category
+    | Type_scheme : type_scheme category
+    | Constructor : constructor category
+    | Label       : label category
+    | Type_decl   : type_decl category
+    | Value_desc  : value_desc category
+    | Module_type : module_type category
+    | Functor_parameter : functor_parameter category
+    | Module_decl : module_decl category
+    | Module_type_decl : module_type_decl category
+    | Signature   : signature category
+    | Signature_item : signature_item category
+
+  type ('a, 'b) enter_category =
+    | Enter_type_scheme : (unit, type_scheme) enter_category
+    | Enter_constructor : (unit, constructor) enter_category
+    | Enter_label : (unit, label) enter_category
+    | Enter_type_decl : (unit, type_decl) enter_category
+    | Enter_functor_parameter : (functor_parameter, module_type) enter_category
+    | Enter_signature_items : (unit, signature_item list) enter_category
+
+  type 'env bind = { bind: 'a. 'a binding -> 'env -> 'env }
+  let enter (type a b env) (bind : env bind)
+      (category : (a, b) enter_category) (param: a) (value : b) (env : env) : env =
+    let bind d e = bind.bind d e in
     match category with
-    | Type_expr -> env
-    | Type_level -> env
-    | Type_scheme ->
-      let lvl = Type_scheme.forall value in
-      bind.bind (Type_level.binder lvl) (Type_level lvl) env
-    (* Constructors and labels are bound by the type declaration *)
-    | Constructor -> env
-    | Label_decl -> env
-    | Type_decl ->
-      let lvl = Type_decl.forall value in
-      bind.bind (Type_level.binder lvl) (Type_level lvl) env
-    | Value_desc -> env
-    | Module_type ->
-      begin match Module_type.desc value with
-       | Functor (fp, _) ->
-         begin match Functor_parameter.desc fp with
-           | Named (Some binder, mt) ->
-             bind.bind binder (Module (Module_decl.make (get_text (get_name binder)) mt)) env
-           | _ -> env
-         end
-       | _ -> env
+    | Enter_type_scheme ->
+      bind (Type_level (Type_scheme.forall value)) env
+    | Enter_constructor ->
+      bind (Type_level (Constructor.forall value)) env
+    | Enter_label ->
+      bind (Type_level (Label.forall value)) env
+    | Enter_type_decl ->
+      bind (Type_level (Type_decl.forall value)) env
+    | Enter_functor_parameter ->
+      begin match Functor_parameter.desc param with
+        | Unit -> env
+        | Anonymous _ -> env
+        | Named md -> bind (Module md) env
       end
-    | Functor_parameter -> env
-    | Module_decl -> env
-    | Module_type_decl -> env
-    | Signature -> env
-    | Signature_item -> begin match Signature_item.desc value with
-        | Value (b, d) ->
-          bind.bind b (Value d) env
-        | Type (_, bs) ->
-          List.fold_left (fun env (b, d) -> bind.bind b (Type d) env) env bs
-        | Module (_, bs) ->
-          List.fold_left (fun env (b, d) -> bind.bind b (Module d) env) env bs
-        | Module_type (b, d) ->
-          bind.bind b (Module_type d) env
+    | Enter_signature_items ->
+      begin match value with
+        | [] -> env
+        | x :: _ ->
+          match Signature_item.desc x with
+          | Value v -> bind (Value v) env
+          | Type (_, bs) ->
+            List.fold_left (fun env t -> bind (Type t) env) env bs
+          | Module (_, bs) ->
+            List.fold_left (fun env m -> bind (Module m) env) env bs
+          | Module_type mt ->
+            bind (Module_type mt) env
       end
 
-  type 'env iter = { iter: 'a. 'env iter -> 'env -> 'a category -> 'a -> unit }
-  let iter (type a env) (iter : env iter) env
-      (category : a category) (value : a) : unit =
-    let iter k x = iter.iter iter env k x in
+  type 'env iter = {
+    syntax: 'a. 'env iter -> 'env -> 'a category -> 'a -> unit;
+    enter: 'a 'b. 'env iter -> 'env -> ('a, 'b) enter_category -> 'a -> 'b -> unit;
+  }
+
+  let iter_syntax (type a env)
+      (iter : env iter) env (category : a category) (value : a) : unit =
+    let syntax k x = iter.syntax iter env k x in
+    let enter k x = iter.enter iter env k x in
     match category with
     | Type_expr -> begin match Type_expr.desc value with
         | Var _ -> ()
         | Arrow {lhs; rhs} ->
-          iter Type_expr lhs;
-          iter Type_expr rhs;
+          syntax Type_expr lhs;
+          syntax Type_expr rhs;
         | Tuple ts ->
-          List.iter (iter Type_expr) ts
+          List.iter (syntax Type_expr) ts
         | Const (ts, _) ->
-          List.iter (iter Type_expr) ts
+          List.iter (syntax Type_expr) ts
       end
     | Type_level -> ()
     | Type_scheme ->
-      iter Type_level (Type_scheme.forall value);
-      iter Type_expr (Type_scheme.expr value)
+      enter Enter_type_scheme () value
     | Constructor ->
-      iter Type_level (Constructor.forall value);
-      begin match Constructor.arguments value with
-        | Tuple ts -> List.iter (iter Type_expr) ts
-        | Record ls -> List.iter (iter Label_decl) ls
-      end;
-      iter Type_expr (Constructor.result value)
-    | Label_decl ->
-      iter Type_level (Label_decl.forall value);
-      iter Type_expr (Label_decl.record value);
-      iter Type_expr (Label_decl.field value)
+      enter Enter_constructor () value
+    | Label ->
+      enter Enter_label () value
     | Type_decl ->
-      iter Type_level (Type_decl.forall value);
-      List.iter (iter Type_expr) (Type_decl.params value);
+      enter Enter_type_decl () value
+    | Value_desc ->
+      syntax Type_scheme (Value_desc.typ value)
+    | Module_type ->
+      begin match Module_type.desc value with
+        | Ident _ -> ()
+        | Signature s -> syntax Signature s
+        | Functor (fp, mt) ->
+          syntax Functor_parameter fp;
+          enter Enter_functor_parameter fp mt
+        | Alias _ -> ()
+      end
+    | Functor_parameter ->
+      begin match Functor_parameter.desc value with
+        | Unit -> ()
+        | Anonymous mt -> syntax Module_type mt
+        | Named md -> syntax Module_decl md
+      end
+    | Module_decl ->
+      syntax Module_type (Module_decl.typ value)
+    | Module_type_decl ->
+      Option.iter (syntax Module_type) (Module_type_decl.typ value)
+    | Signature ->
+      List.iter (syntax Signature_item) (Signature.items value)
+    | Signature_item -> begin match Signature_item.desc value with
+        | Value d -> syntax Value_desc d
+        | Type (_, ds) -> List.iter (syntax Type_decl) ds
+        | Module (_, ds) -> List.iter (syntax Module_decl) ds
+        | Module_type d ->syntax Module_type_decl d
+      end
+
+  let iter_enter (type a b env)
+      (iter : env iter) env
+      (category : (a, b) enter_category) (_ : a) (value : b) : unit =
+    let syntax k x = iter.syntax iter env k x in
+    let enter k x = iter.enter iter env k x in
+    match category with
+    | Enter_type_scheme ->
+      syntax Type_level (Type_scheme.forall value);
+      syntax Type_expr (Type_scheme.expr value)
+    | Enter_constructor ->
+      syntax Type_level (Constructor.forall value);
+      begin match Constructor.arguments value with
+        | Tuple ts -> List.iter (syntax Type_expr) ts
+        | Record ls -> List.iter (syntax Label) ls
+      end;
+      syntax Type_expr (Constructor.result value)
+    | Enter_label ->
+      syntax Type_level (Label.forall value);
+      syntax Type_expr (Label.record value);
+      syntax Type_expr (Label.field value)
+    | Enter_type_decl ->
+      syntax Type_level (Type_decl.forall value);
+      List.iter (syntax Type_expr) (Type_decl.params value);
       begin match Type_decl.desc value with
         | Type_decl.Abstract -> ()
         | Type_decl.Open -> ()
         | Type_decl.Record ls ->
-          List.iter (iter Label_decl) ls
+          List.iter (syntax Label) ls
         | Type_decl.Variant cs ->
-          List.iter (iter Constructor) cs
+          List.iter (syntax Constructor) cs
       end
-    | Value_desc ->
-      iter Type_scheme (Value_desc.typ value)
-    | Module_type ->
-      begin match Module_type.desc value with
-        | Ident _ -> ()
-        | Signature s -> iter Signature s
-        | Functor (fp, mt) ->
-          iter Functor_parameter fp;
-          iter Module_type mt
-        | Alias _ -> ()
-      end
-    | Functor_parameter -> begin match Functor_parameter.desc value with
-        | Unit -> ()
-        | Named (_id, mt) -> iter Module_type mt
-      end
-    | Module_decl ->
-      iter Module_type (Module_decl.typ value)
-    | Module_type_decl ->
-      Option.iter (iter Module_type) (Module_type_decl.typ value)
-    | Signature ->
-      List.iter (iter Signature_item) (Signature.items value)
-    | Signature_item -> begin match Signature_item.desc value with
-        | Value (_, d) -> iter Value_desc d
-        | Type (_, ds) -> List.iter (fun (_,d) -> iter Type_decl d) ds
-        | Module (_, ds) -> List.iter (fun (_,d) -> iter Module_decl d) ds
-        | Module_type (_, d) ->iter Module_type_decl d
+    | Enter_functor_parameter ->
+      syntax Module_type value
+    | Enter_signature_items ->
+      begin match value with
+        | [] -> ()
+        | x :: xs ->
+          syntax Signature_item x;
+          enter Enter_signature_items () xs
       end
 
-  type 'env map = { map: 'a. 'env map -> 'env -> 'a category -> 'a -> 'a }
-  let map (type a env) (map : env map) env
-      (category : a category) (value : a) : a =
-    let map k x = map.map map env k x in
+  let iter = {syntax = iter_syntax; enter = iter_enter}
+
+  type 'env map = {
+    syntax: 'a. 'env map -> 'env -> 'a category -> 'a -> 'a;
+    enter: 'a 'b. 'env map -> 'env -> ('a, 'b) enter_category -> 'a -> 'b -> 'b;
+  }
+
+  let map_syntax (type a env)
+      (map : env map) env (category : a category) (value : a) : a =
+    let syntax k x = map.syntax map env k x in
+    let enter k x = map.enter map env k x in
     match category with
-    | Type_expr -> begin match Type_expr.desc value with
+    | Type_expr ->
+      begin match Type_expr.desc value with
         | Var _ -> value
         | Arrow {lhs; rhs} ->
-          let lhs' = map Type_expr lhs in
-          let rhs' = map Type_expr rhs in
-          if Type_expr.equal lhs lhs' && Type_expr.equal rhs rhs' then
-            value
-          else
-            Type_expr.make (Arrow {lhs=lhs'; rhs=rhs'})
+          let lhs' = syntax Type_expr lhs in
+          let rhs' = syntax Type_expr rhs in
+          if Type_expr.equal lhs lhs' && Type_expr.equal rhs rhs'
+          then value
+          else Type_expr.make (Arrow {lhs=lhs'; rhs=rhs'})
         | Tuple ts ->
-          let ts' = List.map (map Type_expr) ts in
-          if List.equal Type_expr.equal ts ts' then
-            value
-          else
-            Type_expr.make (Tuple ts')
+          let ts' = List.map (syntax Type_expr) ts in
+          if List.equal Type_expr.equal ts ts'
+          then value
+          else Type_expr.make (Tuple ts')
         | Const (ts, p) ->
-          let ts' = List.map (map Type_expr) ts in
-          if List.equal Type_expr.equal ts ts' then
-            value
-          else
-            Type_expr.make (Const (ts', p))
+          let ts' = List.map (syntax Type_expr) ts in
+          if List.equal Type_expr.equal ts ts'
+          then value
+          else Type_expr.make (Const (ts', p))
       end
     | Type_level -> value
     | Type_scheme ->
-      let forall = Type_scheme.forall value in
-      let expr = Type_scheme.expr value in
-      let forall' = map Type_level forall in
-      let expr' = map Type_expr expr in
-      if forall == forall' && Type_expr.equal expr expr' then
-        value
-      else
-        Type_scheme.make forall' expr'
+      enter Enter_type_scheme () value
     | Constructor ->
-      let forall = Constructor.forall value in
-      let forall' = map Type_level forall in
-      let arguments = Constructor.arguments value in
-      let arguments' = match arguments with
-        | Tuple ts ->
-          let ts' = List.map (map Type_expr) ts in
-          if List.equal Type_expr.equal ts ts'
-          then arguments
-          else Tuple ts'
-        | Record ls ->
-          let ls' = List.map (map Label_decl) ls in
-          if List.equal (==) ls ls'
-          then arguments
-          else Record ls'
-      in
-      let result = Constructor.result value in
-      let result' = map Type_expr result in
-      if forall == forall' &&
-         arguments == arguments' &&
-         Type_expr.equal result result'
-      then value
-      else Constructor.make (Constructor.name value) ~forall:forall' arguments' result'
-    | Label_decl ->
-      let forall = Label_decl.forall value in
-      let forall' = map Type_level forall in
-      let record = Label_decl.record value in
-      let record' = map Type_expr record in
-      let field = Label_decl.field value in
-      let field' = map Type_expr field in
-      if forall == forall' &&
-         Type_expr.equal record record' &&
-         Type_expr.equal field field'
-      then value
-      else Label_decl.make
-          (Label_decl.name value) (Label_decl.mutability value)
-          ~forall:forall' ~record:record' ~field:field'
+      enter Enter_constructor () value
+    | Label ->
+      enter Enter_label () value
     | Type_decl ->
-      let forall = Type_decl.forall value in
-      let forall' = map Type_level forall in
-      let params = Type_decl.params value in
-      let params' = List.map (map Type_expr) params in
-      let desc = Type_decl.desc value in
-      let desc' = match desc with
-        | Abstract -> desc
-        | Open -> desc
-        | Record ls ->
-          let ls' = List.map (map Label_decl) ls in
-          if List.equal (==) ls ls'
-          then desc
-          else Record ls'
-        | Variant cs ->
-          let cs' = List.map (map Constructor) cs in
-          if List.equal (==) cs cs'
-          then desc
-          else Variant cs'
-      in
-      let manifest = Type_decl.manifest value in
-      let manifest' = Option.map (map Type_expr) manifest in
-      if forall == forall' &&
-         List.equal (==) params params' &&
-         desc == desc' &&
-         Option.equal Type_expr.equal manifest manifest'
-      then value
-      else Type_decl.make (Type_decl.name value)
-          ~forall:forall' ~params:params' ~manifest:manifest' desc'
+      enter Enter_type_decl () value
     | Value_desc ->
       let typ = Value_desc.typ value in
-      let typ' = map Type_scheme typ in
-      if typ == typ' then
-        value
-      else
-        Value_desc.make (Value_desc.name value) typ' (Value_desc.desc value)
+      let typ' = syntax Type_scheme typ in
+      if typ == typ'
+      then value
+      else Value_desc.make (Value_desc.binder value) typ' (Value_desc.desc value)
     | Module_type ->
       begin match Module_type.desc value with
         | Ident _ -> value
         | Alias _ -> value
         | Signature s ->
-          let s' = map Signature s in
-          if s' == s then
-            value
-          else
-            Module_type.make (Signature s')
+          let s' = syntax Signature s in
+          if s' == s
+          then value
+          else Module_type.make (Signature s')
         | Functor (fp, mt) ->
-          let fp' = map Functor_parameter fp in
-          let mt' = map Module_type mt in
-          if fp' == fp && mt == mt' then
-            value
-          else
-            Module_type.make (Functor (fp, mt))
+          let fp' = syntax Functor_parameter fp in
+          let mt' = syntax Module_type mt in
+          if fp' == fp && mt == mt'
+          then value
+          else Module_type.make (Functor (fp, mt))
       end
     | Functor_parameter -> begin match Functor_parameter.desc value with
         | Unit -> value
-        | Named (id, mt) ->
-          let mt' = map Module_type mt in
-          if mt == mt' then
-            Functor_parameter.make (Named (id, mt'))
-          else
-            value
+        | Anonymous mt ->
+          let mt' = syntax Module_type mt in
+          if mt == mt'
+          then value
+          else Functor_parameter.make (Anonymous mt')
+        | Named md ->
+          let md' = syntax Module_decl md in
+          if md == md'
+          then value
+          else Functor_parameter.make (Named md')
       end
     | Module_decl ->
       let mt = Module_decl.typ value in
-      let mt' = map Module_type mt in
-      if mt == mt' then
-        value
-      else
-        Module_decl.make (Module_decl.name value) mt'
+      let mt' = syntax Module_type mt in
+      if mt == mt'
+      then value
+      else Module_decl.make (Module_decl.binder value) mt'
     | Module_type_decl ->
       let mt = Module_type_decl.typ value in
-      let mt' = Option.map (map Module_type) mt in
-      if mt == mt' then
-        value
-      else
-        Module_type_decl.make mt'
+      let mt' = Option.map (syntax Module_type) mt in
+      if mt == mt'
+      then value
+      else Module_type_decl.make (Module_type_decl.binder value) mt'
     | Signature ->
       let items = Signature.items value in
-      let items' = List.map (map Signature_item) items in
-      if List.equal (==) items items' then
-        value
-      else
-        Signature.make items'
+      let items' = List.map (syntax Signature_item) items in
+      if List.equal (==) items items'
+      then value
+      else Signature.make items'
     | Signature_item ->
       let desc = Signature_item.desc value in
       let desc' = match desc with
-        | Value (b, d) ->
-          let d' = map Value_desc d in
-          if d == d'
+        | Value v ->
+          let v' = syntax Value_desc v in
+          if v == v'
           then desc
-          else Value (b, d')
+          else Value v'
         | Type (rf, ds) ->
-          let ds' =
-            List.map (fun (b,d as input) ->
-                let d' = map Type_decl d in
-                if d == d'
-                then input
-                else (b, d')
-              ) ds
-          in
+          let ds' = List.map (syntax Type_decl) ds in
           if List.equal (==) ds ds'
           then desc
           else Type (rf, ds')
         | Module (rf, ds) ->
-          let ds' =
-            List.map (fun (b,d as input) ->
-                let d' = map Module_decl d in
-                if d == d'
-                then input
-                else (b, d')
-              ) ds
-          in
+          let ds' = List.map (syntax Module_decl) ds in
           if List.equal (==) ds ds'
           then desc
           else Module (rf, ds')
-        | Module_type (b, d) ->
-          let d' = map Module_type_decl d in
-          if d == d'
+        | Module_type mtd ->
+          let mtd' = syntax Module_type_decl mtd in
+          if mtd == mtd'
           then desc
-          else Module_type (b, d')
+          else Module_type mtd'
       in
-      if desc == desc' then
-        value
-      else
-        Signature_item.make (Signature_item.visibility value) desc'
+      if desc == desc'
+      then value
+      else Signature_item.make (Signature_item.visibility value) desc'
+
+  let map_enter (type a b env)
+      (map : env map) env (category : (a, b) enter_category) (_ : a) (value : b) : b =
+    let syntax k x = map.syntax map env k x in
+    let enter k x = map.enter map env k x in
+    match category with
+    | Enter_type_scheme ->
+      let forall = Type_scheme.forall value in
+      let expr = Type_scheme.expr value in
+      let forall' = syntax Type_level forall in
+      let expr' = syntax Type_expr expr in
+      if forall == forall' && Type_expr.equal expr expr'
+      then value
+      else Type_scheme.make forall' expr'
+    | Enter_constructor ->
+      let forall = Constructor.forall value in
+      let forall' = syntax Type_level forall in
+      let arguments = Constructor.arguments value in
+      let arguments' = match arguments with
+        | Tuple ts ->
+          let ts' = List.map (syntax Type_expr) ts in
+          if List.equal Type_expr.equal ts ts'
+          then arguments
+          else Tuple ts'
+        | Record ls ->
+          let ls' = List.map (syntax Label) ls in
+          if List.equal (==) ls ls'
+          then arguments
+          else Record ls'
+      in
+      let result = Constructor.result value in
+      let result' = syntax Type_expr result in
+      if forall == forall' &&
+         arguments == arguments' &&
+         Type_expr.equal result result'
+      then value
+      else Constructor.make (Constructor.path value)
+          ~forall:forall' arguments' result'
+    | Enter_label ->
+      let forall = Label.forall value in
+      let forall' = syntax Type_level forall in
+      let record = Label.record value in
+      let record' = syntax Type_expr record in
+      let field = Label.field value in
+      let field' = syntax Type_expr field in
+      if forall == forall' &&
+         Type_expr.equal record record' &&
+         Type_expr.equal field field'
+      then value
+      else Label.make (Label.path value) (Label.mutability value)
+          ~forall:forall' ~record:record' ~field:field'
+    | Enter_type_decl ->
+      let forall = Type_decl.forall value in
+      let forall' = syntax Type_level forall in
+      let params = Type_decl.params value in
+      let params' = List.map (syntax Type_expr) params in
+      let desc = Type_decl.desc value in
+      let desc' = match desc with
+        | Abstract -> desc
+        | Open -> desc
+        | Record ls ->
+          let ls' = List.map (syntax Label) ls in
+          if List.equal (==) ls ls'
+          then desc
+          else Record ls'
+        | Variant cs ->
+          let cs' = List.map (syntax Constructor) cs in
+          if List.equal (==) cs cs'
+          then desc
+          else Variant cs'
+      in
+      let manifest = Type_decl.manifest value in
+      let manifest' = Option.map (syntax Type_expr) manifest in
+      if forall == forall' &&
+         List.equal (==) params params' &&
+         desc == desc' &&
+         Option.equal Type_expr.equal manifest manifest'
+      then value
+      else Type_decl.make (Type_decl.binder value)
+          ~forall:forall' ~params:params' ~manifest:manifest' desc'
+    | Enter_functor_parameter ->
+      syntax Module_type value
+    | Enter_signature_items  ->
+      begin match value with
+        | [] -> []
+        | x :: xs ->
+          let x = syntax Signature_item x in
+          let xs = enter Enter_signature_items () xs in
+          x :: xs
+      end
+
+  let map = {syntax = map_syntax; enter = map_enter}
 end
