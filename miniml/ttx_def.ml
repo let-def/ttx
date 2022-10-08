@@ -1,10 +1,12 @@
-type location = {
+type location = Location.t = {
   loc_start: Lexing.position;
   loc_end: Lexing.position;
   loc_ghost: bool;
 }
 
-type 'a loc = {
+let location_none = Location.none
+
+type 'a loc = 'a Location.loc = {
   txt: 'a;
   loc: location;
 }
@@ -70,6 +72,7 @@ type ns_module_type = private Ns_module_type
 
 module Vector : sig
   type 'a t
+  val empty : 'a t
   val of_list : 'a list -> 'a t
   val to_list : 'a t -> 'a list
   val of_array : 'a array -> 'a t
@@ -83,6 +86,7 @@ module Vector : sig
   val equal : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
 end = struct
   type 'a t = 'a array
+  let empty = [||]
   let of_list = Array.of_list
   let to_list = Array.to_list
   let of_array = Array.copy

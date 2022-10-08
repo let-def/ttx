@@ -70,7 +70,7 @@ module Value_desc : sig
 
   val make : location -> attributes -> ns_value binder -> type_scheme -> desc -> t
   val loc : t -> location
-  val attributes : t -> attributes
+  val attrs : t -> attributes
 end
 
 module Constructor : sig
@@ -92,7 +92,7 @@ module Constructor : sig
   val arguments : t -> arguments
   val result : t -> type_expr
   val loc : t -> location
-  val attributes : t -> attributes
+  val attrs : t -> attributes
 end
 
 module Label : sig
@@ -115,7 +115,7 @@ module Label : sig
   val record : t -> type_expr
   val field : t -> type_expr
   val loc : t -> location
-  val attributes : t -> attributes
+  val attrs : t -> attributes
 end
 
 module Type_decl : sig
@@ -171,7 +171,7 @@ module Module_decl : sig
   val binder : t -> ns_module binder
   val typ : t -> module_type
   val loc : t -> location
-  val attributes : t -> attributes
+  val attrs : t -> attributes
 end
 
 module Module_type_decl : sig
@@ -180,7 +180,7 @@ module Module_type_decl : sig
   val binder : t -> ns_module_type binder
   val typ : t -> module_type option
   val loc : t -> location
-  val attributes : t -> attributes
+  val attrs : t -> attributes
 end
 
 module Signature_item : sig
