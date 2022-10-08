@@ -164,8 +164,9 @@ module Value_desc : sig
   val binder : t -> ns_value binder
   val typ : t -> Type_scheme.t
   val desc : t -> desc
-
-  val make : ns_value binder -> Type_scheme.t -> desc -> t
+  val make : location -> attributes -> ns_value binder -> Type_scheme.t -> desc -> t
+  val loc : t -> location
+  val attributes : t -> attributes
 end = struct
   type desc =
     | Regular
@@ -175,13 +176,19 @@ end = struct
     binder: ns_value binder;
     typ: Type_scheme.t;
     desc: desc;
+    loc: location;
+    attributes: attributes;
   }
 
   let binder t = t.binder
   let typ t = t.typ
   let desc t = t.desc
 
-  let make binder typ desc = {binder; typ; desc}
+  let make loc attributes binder typ desc =
+    {binder; loc; attributes; typ; desc}
+
+  let loc t = t.loc
+  let attributes t = t.attributes
 end
 
 type nonrec constructor_path = {
@@ -203,12 +210,14 @@ module Label : sig
     name: string;
   }
 
-  val make : path -> mutable_flag -> forall:Type_level.t -> record:Type_expr.t -> field:Type_expr.t -> t
+  val make : location -> attributes -> path -> mutable_flag -> forall:Type_level.t -> record:Type_expr.t -> field:Type_expr.t -> t
   val path : t -> path
   val forall : t -> Type_level.t
   val mutability : t -> mutable_flag
   val record : t -> Type_expr.t
   val field : t -> Type_expr.t
+  val loc : t -> location
+  val attributes : t -> attributes
 end = struct
   type kind =
     | Record of ns_type path
@@ -226,16 +235,21 @@ end = struct
     mutability: mutable_flag;
     record: Type_expr.t;
     field: Type_expr.t;
+    loc: location;
+    attributes: attributes;
   }
 
-  let make path mutability ~forall ~record ~field =
-    { path; forall; mutability; record; field }
+  let make loc attributes path mutability ~forall ~record ~field =
+    {loc; attributes; path; forall; mutability; record; field}
 
   let path       t = t.path
   let forall     t = t.forall
   let mutability t = t.mutability
   let record     t = t.record
   let field      t = t.field
+
+  let loc t = t.loc
+  let attributes t = t.attributes
 end
 
 module Constructor : sig
@@ -251,11 +265,13 @@ module Constructor : sig
     name: string;
   }
 
-  val make : path -> forall:Type_level.t -> arguments -> Type_expr.t -> t
+  val make : location -> attributes -> path -> forall:Type_level.t -> arguments -> Type_expr.t -> t
   val path : t -> path
   val forall : t -> Type_level.t
   val arguments : t -> arguments
   val result : t -> Type_expr.t
+  val loc : t -> location
+  val attributes : t -> attributes
 end = struct
   type nonrec path = constructor_path = {
     typ: ns_type path;
@@ -272,15 +288,20 @@ end = struct
     forall: Type_level.t;
     arguments: arguments;
     result: Type_expr.t;
+    loc: location;
+    attributes: attributes;
   }
 
-  let make path ~forall arguments result =
-    {path; forall; arguments; result}
+  let make loc attributes path ~forall arguments result =
+    {loc; attributes; path; forall; arguments; result}
 
   let path      t = t.path
   let forall    t = t.forall
   let arguments t = t.arguments
   let result    t = t.result
+
+  let loc t = t.loc
+  let attributes t = t.attributes
 end
 
 module Type_decl : sig
@@ -291,7 +312,7 @@ module Type_decl : sig
     | Variant of Constructor.t list
     | Open
 
-  val make :
+  val make : location -> attributes ->
     ns_type binder ->
     forall:Type_level.t ->
     params:Type_expr.t list ->
@@ -303,6 +324,8 @@ module Type_decl : sig
   val params : t -> Type_expr.t list
   val manifest : t -> Type_expr.t option
   val desc : t -> desc
+  val loc : t -> location
+  val attributes : t -> attributes
 end = struct
   type desc =
     | Abstract
@@ -316,16 +339,21 @@ end = struct
     params: Type_expr.t list;
     manifest: Type_expr.t option;
     desc: desc;
+    loc: location;
+    attributes: attributes;
   }
 
-  let make binder ~forall ~params ~manifest desc =
-    {binder; forall; params; manifest; desc}
+  let make loc attributes binder ~forall ~params ~manifest desc =
+    {binder; loc; attributes; forall; params; manifest; desc}
 
   let binder t = t.binder
   let forall t = t.forall
   let params t = t.params
   let desc   t = t.desc
   let manifest t = t.manifest
+
+  let loc t = t.loc
+  let attributes t = t.attributes
 end
 
 module rec Module_type : sig
@@ -375,26 +403,46 @@ end
 and Module_decl : sig
   type t
 
-  val make : ns_module binder -> Module_type.t -> t
+  val make : location -> attributes -> ns_module binder -> Module_type.t -> t
   val binder : t -> ns_module binder
   val typ : t -> Module_type.t
+  val loc : t -> location
+  val attributes : t -> attributes
 end = struct
-  type t = { binder: ns_module binder; typ: Module_type.t }
-  let make binder typ = {binder; typ}
+  type t = {
+    binder: ns_module binder;
+    typ: Module_type.t;
+    loc: location;
+    attributes: attributes;
+  }
+  let make loc attributes binder typ = {loc; attributes; binder; typ}
   let binder t = t.binder
   let typ t = t.typ
+
+  let loc t = t.loc
+  let attributes t = t.attributes
 end
 
 and Module_type_decl : sig
   type t
-  val make : ns_module_type binder -> Module_type.t option -> t
+  val make : location -> attributes -> ns_module_type binder -> Module_type.t option -> t
   val binder : t -> ns_module_type binder
   val typ : t -> Module_type.t option
+  val loc : t -> location
+  val attributes : t -> attributes
 end = struct
-  type t = { binder: ns_module_type binder; typ: Module_type.t option }
-  let make binder typ = { binder; typ }
+  type t = {
+    binder: ns_module_type binder;
+    typ: Module_type.t option;
+    loc: location;
+    attributes: attributes;
+  }
+  let make loc attributes binder typ = {loc; attributes; binder; typ }
   let binder t = t.binder
   let typ t = t.typ
+
+  let loc t = t.loc
+  let attributes t = t.attributes
 end
 
 and Signature_item : sig
@@ -467,6 +515,8 @@ module Visitor : sig
   val namespace : 'a binding -> 'a namespace
 
   type 'a category =
+    | Location    : location category
+    | Attributes  : attributes category
     | Type_expr   : type_expr category
     | Type_level  : type_level category
     | Type_scheme : type_scheme category
@@ -522,6 +572,8 @@ end = struct
     | Module_type _ -> Module_type
 
   type 'a category =
+    | Location    : location category
+    | Attributes  : attributes category
     | Type_expr   : type_expr category
     | Type_level  : type_level category
     | Type_scheme : type_scheme category
@@ -587,6 +639,8 @@ end = struct
     let syntax k x = iter.syntax iter env k x in
     let enter k x = iter.enter iter env k x in
     match category with
+    | Location -> ()
+    | Attributes -> ()
     | Type_expr -> begin match Type_expr.desc value with
         | Var _ -> ()
         | Arrow {lhs; rhs} ->
@@ -607,6 +661,8 @@ end = struct
     | Type_decl ->
       enter Enter_type_decl () value
     | Value_desc ->
+      syntax Location (Value_desc.loc value);
+      syntax Attributes (Value_desc.attributes value);
       syntax Type_scheme (Value_desc.typ value)
     | Module_type ->
       begin match Module_type.desc value with
@@ -624,8 +680,12 @@ end = struct
         | Named md -> syntax Module_decl md
       end
     | Module_decl ->
+      syntax Location (Module_decl.loc value);
+      syntax Attributes (Module_decl.attributes value);
       syntax Module_type (Module_decl.typ value)
     | Module_type_decl ->
+      syntax Location (Module_type_decl.loc value);
+      syntax Attributes (Module_type_decl.attributes value);
       Option.iter (syntax Module_type) (Module_type_decl.typ value)
     | Signature ->
       List.iter (syntax Signature_item) (Signature.items value)
@@ -646,6 +706,8 @@ end = struct
       syntax Type_level (Type_scheme.forall value);
       syntax Type_expr (Type_scheme.expr value)
     | Enter_constructor ->
+      syntax Location (Constructor.loc value);
+      syntax Attributes (Constructor.attributes value);
       syntax Type_level (Constructor.forall value);
       begin match Constructor.arguments value with
         | Tuple ts -> Vector.iter (syntax Type_expr) ts
@@ -653,10 +715,14 @@ end = struct
       end;
       syntax Type_expr (Constructor.result value)
     | Enter_label ->
+      syntax Location (Label.loc value);
+      syntax Attributes (Label.attributes value);
       syntax Type_level (Label.forall value);
       syntax Type_expr (Label.record value);
       syntax Type_expr (Label.field value)
     | Enter_type_decl ->
+      syntax Location (Type_decl.loc value);
+      syntax Attributes (Type_decl.attributes value);
       syntax Type_level (Type_decl.forall value);
       List.iter (syntax Type_expr) (Type_decl.params value);
       begin match Type_decl.desc value with
@@ -689,6 +755,8 @@ end = struct
     let syntax k x = map.syntax map env k x in
     let enter k x = map.enter map env k x in
     match category with
+    | Location -> value
+    | Attributes -> value
     | Type_expr ->
       begin match Type_expr.desc value with
         | Var _ -> value
@@ -719,11 +787,16 @@ end = struct
     | Type_decl ->
       enter Enter_type_decl () value
     | Value_desc ->
+      let loc = Value_desc.loc value in
+      let attributes = Value_desc.attributes value in
+      let loc' = syntax Location loc in
+      let attributes' = syntax Attributes attributes in
       let typ = Value_desc.typ value in
       let typ' = syntax Type_scheme typ in
-      if typ == typ'
+      if loc == loc' && attributes == attributes' && typ == typ'
       then value
-      else Value_desc.make (Value_desc.binder value) typ' (Value_desc.desc value)
+      else Value_desc.make loc' attributes'
+          (Value_desc.binder value) typ' (Value_desc.desc value)
     | Module_type ->
       begin match Module_type.desc value with
         | Ident _ -> value
@@ -754,17 +827,25 @@ end = struct
           else Functor_parameter.make (Named md')
       end
     | Module_decl ->
+      let loc = syntax Location (Module_decl.loc value) in
+      let attributes = syntax Attributes (Module_decl.attributes value) in
+      let loc' = syntax Location loc in
+      let attributes' = syntax Attributes attributes in
       let mt = Module_decl.typ value in
       let mt' = syntax Module_type mt in
-      if mt == mt'
+      if loc == loc' && attributes == attributes' && mt == mt'
       then value
-      else Module_decl.make (Module_decl.binder value) mt'
+      else Module_decl.make loc' attributes' (Module_decl.binder value) mt'
     | Module_type_decl ->
+      let loc = syntax Location (Module_type_decl.loc value) in
+      let attributes = syntax Attributes (Module_type_decl.attributes value) in
+      let loc' = syntax Location loc in
+      let attributes' = syntax Attributes attributes in
       let mt = Module_type_decl.typ value in
       let mt' = Option.map (syntax Module_type) mt in
-      if mt == mt'
+      if loc == loc' && attributes == attributes' && Option.equal (==) mt mt'
       then value
-      else Module_type_decl.make (Module_type_decl.binder value) mt'
+      else Module_type_decl.make loc' attributes' (Module_type_decl.binder value) mt'
     | Signature ->
       let items = Signature.items value in
       let items' = List.map (syntax Signature_item) items in
@@ -813,6 +894,10 @@ end = struct
       then value
       else Type_scheme.make forall' expr'
     | Enter_constructor ->
+      let loc = Constructor.loc value in
+      let attributes = Constructor.attributes value in
+      let loc' = syntax Location loc in
+      let attributes' = syntax Attributes attributes in
       let forall = Constructor.forall value in
       let forall' = syntax Type_level forall in
       let arguments = Constructor.arguments value in
@@ -830,26 +915,37 @@ end = struct
       in
       let result = Constructor.result value in
       let result' = syntax Type_expr result in
-      if forall == forall' &&
-         arguments == arguments' &&
+      if loc == loc' && attributes == attributes' &&
+         forall == forall' && arguments == arguments' &&
          Type_expr.equal result result'
       then value
-      else Constructor.make (Constructor.path value)
+      else Constructor.make loc' attributes'
+          (Constructor.path value)
           ~forall:forall' arguments' result'
     | Enter_label ->
+      let loc = Label.loc value in
+      let attributes = Label.attributes value in
+      let loc' = syntax Location loc in
+      let attributes' = syntax Attributes attributes in
       let forall = Label.forall value in
       let forall' = syntax Type_level forall in
       let record = Label.record value in
       let record' = syntax Type_expr record in
       let field = Label.field value in
       let field' = syntax Type_expr field in
-      if forall == forall' &&
+      if loc == loc' && attributes == attributes' &&
+         forall == forall' &&
          Type_expr.equal record record' &&
          Type_expr.equal field field'
       then value
-      else Label.make (Label.path value) (Label.mutability value)
+      else Label.make loc' attributes'
+          (Label.path value) (Label.mutability value)
           ~forall:forall' ~record:record' ~field:field'
     | Enter_type_decl ->
+      let loc = Type_decl.loc value in
+      let attributes = Type_decl.attributes value in
+      let loc' = syntax Location loc in
+      let attributes' = syntax Attributes attributes in
       let forall = Type_decl.forall value in
       let forall' = syntax Type_level forall in
       let params = Type_decl.params value in
@@ -871,12 +967,12 @@ end = struct
       in
       let manifest = Type_decl.manifest value in
       let manifest' = Option.map (syntax Type_expr) manifest in
-      if forall == forall' &&
+      if loc == loc' && attributes == attributes' &&
+         forall == forall' && desc == desc' &&
          List.equal (==) params params' &&
-         desc == desc' &&
          Option.equal Type_expr.equal manifest manifest'
       then value
-      else Type_decl.make (Type_decl.binder value)
+      else Type_decl.make loc' attributes' (Type_decl.binder value)
           ~forall:forall' ~params:params' ~manifest:manifest' desc'
     | Enter_functor_parameter ->
       syntax Module_type value
