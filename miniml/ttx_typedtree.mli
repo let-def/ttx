@@ -1,16 +1,6 @@
 open Ttx_def
 module Ty = Ttx_types
 
-type partial = Partial | Total
-
-type attribute = Parsetree.attribute
-type attributes = attribute list
-
-type longident =
-  | Lident of string
-  | Ldot of longident * string
-  | Lapply of longident * longident
-
 type core_type
 type pattern
 type expression
@@ -55,7 +45,7 @@ module Core_type : sig
     | Var of string
     | Arrow of arg_label * core_type * core_type
     | Tuple of core_type list
-    | Constr of Ty.ns_constructor Ty.path * Longident.t loc * core_type list
+    | Constr of ns_constructor path * Longident.t loc * core_type list
     | Alias of core_type * string
 
   val desc : t -> desc
@@ -82,7 +72,7 @@ module Pattern : sig
     | Lazy of pattern
     | Or of pattern * pattern
     | Constraint of pattern * core_type
-    | Open of Ty.ns_module Ty.path * Longident.t loc * pattern
+    | Open of ns_module path * Longident.t loc * pattern
     | Expression of pattern
 
   val desc : t -> desc
@@ -93,12 +83,12 @@ module Expression : sig
   type t = expression
 
   type desc =
-    | Ident of Ty.ns_value Ty.path * Longident.t loc * Ty.value_desc
+    | Ident of ns_value path * Longident.t loc * Ty.value_desc
     | Constant of constant
     | Let of rec_flag * value_binding list * expression
     | Function of {
         arg_label : arg_label;
-        param : Ty.ns_value Ty.binder;
+        param : ns_value binder;
         cases : case list;
         partial : partial;
       }
@@ -167,7 +157,7 @@ end
 
 module Binding_op : sig
   type t = binding_op
-  val path : t -> Ty.ns_value Ty.path
+  val path : t -> ns_value path
   val name : t -> string loc
   val value : t -> Ty.value_desc
   val typ : t -> Ty.type_expr
@@ -208,7 +198,7 @@ module Functor_parameter : sig
 
   type desc =
     | Unit
-    | Named of Ty.ns_module Ty.binder option * string option loc * module_type
+    | Named of ns_module binder option * string option loc * module_type
 
   val desc : t -> desc
 end

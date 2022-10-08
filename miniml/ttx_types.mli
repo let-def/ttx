@@ -1,44 +1,5 @@
 open Ttx_def
 
-type ns_value = private Ns_value
-type ns_type = private Ns_type
-type ns_type_level = private Ns_type_level
-type ns_module = private Ns_module
-type ns_module_type = private Ns_module_type
-
-module Vector : sig
-  type 'a t
-  val of_array : 'a array -> 'a t
-  val to_array : 'a array -> 'a t
-  val unsafe_of_array : 'a array -> 'a t
-  val unsafe_to_array : 'a array -> 'a t
-  val length : 'a t -> int
-  val get : 'a t -> int -> 'a
-end
-type 'a vector = 'a Vector.t
-
-module Namespace : sig
-  type 'a t =
-    | Value : ns_value t
-    | Type : ns_type t
-    | Type_level : ns_type_level t
-    | Module : ns_module t
-    | Module_type : ns_module_type t
-  val to_string : 'a t -> string
-  val order : 'a t -> 'b t -> ('a, 'b) Context.type_ordering
-end
-
-include Context.S with type 'a namespace = 'a Namespace.t
-
-module Path : sig
-  type 'a t =
-    | Ident : 'a name -> 'a t
-    | Dot   : ns_module t * string -> 'a t
-    (*| Apply : { lhs : ns_module t; rhs: ns_module t } -> ns_module t*)
-end
-
-type 'a path = 'a Path.t
-
 type type_expr
 type type_level
 type type_scheme
