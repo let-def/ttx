@@ -1,7 +1,6 @@
 open Ttx_def
 
 type type_expr
-type type_level
 type type_scheme
 type constructor
 type label
@@ -13,22 +12,6 @@ type module_decl
 type module_type_decl
 type signature
 type signature_item
-
-module Type_level : sig
-  type t = type_level
-  type variable
-  val make : ns_type_level binder -> t
-  val freeze : t -> unit
-
-  val fresh : t -> string option -> variable
-  val level : variable -> ns_type_level name
-  val index : variable -> int
-
-  val binder : t -> ns_type_level binder
-  val count : t -> int
-  val get_var : t -> int -> variable
-  val get_name : t -> int -> string option
-end
 
 module Type_expr : sig
   type t = type_expr
@@ -108,7 +91,10 @@ module Label : sig
     name: string;
   }
 
-  val make : location -> attributes -> path -> mutable_flag -> forall:type_level -> record:type_expr -> field:type_expr -> t
+  val make :
+    location -> attributes ->
+    path -> mutable_flag -> forall:type_level ->
+    record:type_expr -> field:type_expr -> t
   val path : t -> path
   val forall : t -> type_level
   val mutability : t -> mutable_flag
