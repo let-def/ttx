@@ -572,7 +572,8 @@ end = struct
     match category with
     | Location -> ()
     | Attributes -> ()
-    | Type_expr -> begin match Type_expr.desc value with
+    | Type_expr ->
+      begin match Type_expr.desc value with
         | Var _ -> ()
         | Arrow {lhs; rhs} ->
           syntax Type_expr lhs;

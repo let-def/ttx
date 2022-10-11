@@ -1,6 +1,8 @@
 let (%) p t = Dsl.A ([p], t)
 
 let ttx_types : Dsl.decl list = [
+  "open Ttx_def",
+  Custom [`Intf_header; `Impl_header];
   "type_expr", Decl [
     "desc", Variant [
       "Var"   , Tuple [T"Type_level.variable"];
@@ -11,11 +13,58 @@ let ttx_types : Dsl.decl list = [
     "val compare : t -> t -> int\n\
      val equal : t -> t -> bool\n\
      val hash : t -> int\n\
+     \n\
+     val make : desc -> t\n\
+     val desc : t -> desc\n\
+     \n\
      val make_undefined : unit -> t\n\
      val define : t -> desc -> unit\n\
      exception Already_defined\n\
      exception Undefined",
-    Custom [`Intf];
+    Custom [`Intf_make];
+
+    "let gen_id =\n\
+    \  let r = ref 0 in\n\
+    \  fun () -> incr r; !r\n",
+    Custom [`Impl_header];
+
+    "type t = {\n\
+    \  id: int;\n\
+    \  mutable desc: desc option;\n\
+     }\n",
+    Custom [`Impl_type];
+
+    "let compare t1 t2 =\n\
+    \  if t1 == t2\n\
+    \  then 0\n\
+    \  else\n\
+    \    let c = Int.compare t1.id t2.id in\n\
+    \    assert (c <> 0);\n\
+    \    c\n\
+     \n\
+     let equal t1 t2 =\n\
+    \  t1 == t2\n\
+     \n\
+     let hash t = t.id\n\
+     \n\
+     let make desc = {id = gen_id (); desc = Some desc}\n\
+     \n\
+     exception Undefined\n\
+     \n\
+     let desc t =\n\
+    \  match t.desc with\n\
+    \  | None -> raise Undefined\n\
+    \  | Some desc -> desc\n\
+     \n\
+     let make_undefined () = {id = gen_id (); desc = None}\n\
+     \n\
+     exception Already_defined\n\
+     \n\
+     let define t new_desc =\n\
+    \  match t.desc with\n\
+    \  | None -> t.desc <- Some new_desc\n\
+    \  | Some _ -> raise Already_defined\n",
+    Custom [`Impl_make];
   ];
 
   "type_scheme", Decl [
@@ -96,6 +145,7 @@ let ttx_types : Dsl.decl list = [
       "Named"     , Tuple [T"module_decl"];
       "Anonymous" , Tuple [T"module_type"];
     ];
+    "desc", Value (T"desc");
   ];
 
   "module_type", Decl [
@@ -104,7 +154,8 @@ let ttx_types : Dsl.decl list = [
       "Signature" , Tuple [T"signature"];
       "Functor"   , Tuple [T"functor_parameter"; T"module_type"];
       "Alias"     , Tuple [T"ns_module path"];
-    ]
+    ];
+    "desc", Value (T"desc");
   ];
 
   "module_decl", Decl [
@@ -124,7 +175,7 @@ let ttx_types : Dsl.decl list = [
   "signature_item", Decl [
     "visibility", Variant [
       "Exported" , Tuple [];
-      "Hiddent"  , Tuple [];
+      "Hidden"   , Tuple [];
     ];
     "desc", Variant [
       "Value"       , Tuple [T"value_desc"];
@@ -141,4 +192,17 @@ let ttx_types : Dsl.decl list = [
   ];
 ]
 
-let () = Dsl.gen_intf ttx_types
+let usage () =
+  Printf.eprintf "Usage: %s <types.ml|types.mli>\n" Sys.argv.(0);
+  exit 1
+
+let target =
+  if Array.length Sys.argv = 2
+  then Sys.argv.(1)
+  else usage ()
+
+let () =
+  match target with
+  | "types.ml"  -> Dsl.gen_impl stdout ttx_types
+  | "types.mli" -> Dsl.gen_intf stdout ttx_types
+  | _ -> usage ()

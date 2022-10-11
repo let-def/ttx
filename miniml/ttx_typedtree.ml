@@ -67,7 +67,7 @@ end
 
 module Pattern = struct
   type t = {
-    typ: Ty.type_expr;
+    typ: Ty.type_scheme;
     desc: desc;
   }
 
