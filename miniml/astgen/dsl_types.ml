@@ -1,8 +1,12 @@
 let (%) p t = Dsl.A ([p], t)
 
 let ttx_types : Dsl.decl list = [
-  "open Ttx_def",
-  Custom [`Intf_header; `Impl_header];
+  "open Ttx_def", Custom [`Intf_header; `Impl_header];
+
+  "location", Custom [`Visit];
+
+  "attributes", Custom [`Visit];
+
   "type_expr", Decl [
     "desc", Variant [
       "Var"   , Tuple [T"Type_level.variable"];
@@ -10,12 +14,14 @@ let ttx_types : Dsl.decl list = [
       "Tuple" , Tuple [T"type_expr"%"list"];
       "Const" , Tuple [T"type_expr"%"list"; T"ns_type path"];
     ];
+    "desc", Value (T"desc");
+    "desc", Custom [`Accessor];
+
     "val compare : t -> t -> int\n\
      val equal : t -> t -> bool\n\
      val hash : t -> int\n\
      \n\
      val make : desc -> t\n\
-     val desc : t -> desc\n\
      \n\
      val make_undefined : unit -> t\n\
      val define : t -> desc -> unit\n\
@@ -202,7 +208,14 @@ let target =
   else usage ()
 
 let () =
+  let out = Indent.make (output_substring stdout) in
   match target with
-  | "types.ml"  -> Dsl.gen_impl stdout ttx_types
-  | "types.mli" -> Dsl.gen_intf stdout ttx_types
+  | "types.ml"  ->
+    Dsl.gen_impl out ttx_types;
+    Printf.printf "\n";
+    Dsl.gen_visitor_impl out ttx_types
+  | "types.mli" ->
+    Dsl.gen_intf out ttx_types;
+    Printf.printf "\n";
+    Dsl.gen_visitor_intf out ttx_types;
   | _ -> usage ()

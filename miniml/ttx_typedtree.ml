@@ -155,7 +155,7 @@ module rec Expression : sig
         name: longident loc;
       }
     | Variant of {
-        label: label;
+        label: string;
         argument: t option;
       }
     | Record of {
@@ -273,7 +273,7 @@ end = struct
         name: longident loc;
       }
     | Variant of {
-        label: label;
+        label: string;
         argument: t option;
       }
     | Record of {
