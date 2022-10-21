@@ -1,4 +1,0 @@
-(library
-  (name ttx_printer)
-  (libraries cmon compiler-libs.common)
-  (foreign_stubs (language c) (names utils_stubs)))

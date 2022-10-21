@@ -1,0 +1,3 @@
+(library
+  (name ttx_printer)
+  (libraries cmon compiler-libs.common))
