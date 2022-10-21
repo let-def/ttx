@@ -1,0 +1,4 @@
+(library
+  (name miniml2)
+  (libraries grenier.baltree grenier.dbseq compiler-libs)
+  (preprocess (pps visitors.ppx)))
