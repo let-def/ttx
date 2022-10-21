@@ -7,6 +7,8 @@ let ttx_types : Dsl.decl list = [
 
   "attributes", Custom [`Visit];
 
+  "type_level", Custom [`Visit];
+
   "type_expr", Decl [
     "desc", Variant [
       "Var"   , Tuple [T"Type_level.variable"];
@@ -199,7 +201,7 @@ let ttx_types : Dsl.decl list = [
 ]
 
 let usage () =
-  Printf.eprintf "Usage: %s <types.ml|types.mli>\n" Sys.argv.(0);
+  Printf.eprintf "Usage: %s <ttx_types.ml|ttx_types.mli>\n" Sys.argv.(0);
   exit 1
 
 let target =
@@ -210,11 +212,11 @@ let target =
 let () =
   let out = Indent.make (output_substring stdout) in
   match target with
-  | "types.ml"  ->
+  | "ttx_types.ml"  ->
     Dsl.gen_impl out ttx_types;
     Printf.printf "\n";
     Dsl.gen_visitor_impl out ttx_types
-  | "types.mli" ->
+  | "ttx_types.mli" ->
     Dsl.gen_intf out ttx_types;
     Printf.printf "\n";
     Dsl.gen_visitor_intf out ttx_types;

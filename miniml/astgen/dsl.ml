@@ -121,7 +121,7 @@ let gen_sig map_typ dname ~abstract_type fields oc =
   enter_val true;
   begin match get_customs `Intf_make fields with
     | [] -> printf oc "val make : %s -> t\n" (String.concat " -> " params)
-    | cs -> List.iter (Indent.print oc) cs
+    | cs -> List.iter (Indent.printf oc "%s\n") cs
   end
 
 let gen_struct map_typ dname fields oc =
@@ -197,8 +197,10 @@ let gen_intf oc (decls : decl list) =
 let gen_impl oc (decls : decl list) =
   List.iter (printf oc "%s\n") (get_dcustoms `Impl_header decls);
   let typ_table = Hashtbl.create 7 in
-  List.iter (fun (dname, _) ->
-      Hashtbl.add typ_table dname (String.capitalize_ascii dname ^ ".t")
+  List.iter (function
+      | (dname, Decl _) ->
+        Hashtbl.add typ_table dname (String.capitalize_ascii dname ^ ".t")
+      | (_, Custom _) -> ()
     ) decls;
   let map_typ name = try Hashtbl.find typ_table name with Not_found -> name in
   let first_decl = let f = ref true in fun () -> let r = !f in f := false; r in
@@ -267,7 +269,9 @@ let gen_visitor_impl oc (decls : decl list) =
     \  match k with\n";
   let self = "self.iter self a" in
   List.iter (function
-      | (_, Custom _) -> ()
+      | (name, Custom lbls) ->
+        if List.mem `Visit lbls then
+          printf oc "| %s -> ()\n" (String.capitalize_ascii name)
       | (name, Decl fields) ->
         let oc = indent 2 oc' in
         printf oc "| %s ->\n" (String.capitalize_ascii name);
