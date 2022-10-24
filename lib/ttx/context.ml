@@ -34,7 +34,7 @@ module type CONTEXT = sig
 
   (* Creating new bindings *)
 
-  val fresh_group : t -> namegroup
+  val empty_group : t -> namegroup
   val extend : namegroup -> 'a namespace -> string -> namegroup * 'a binder
 end
 
@@ -46,7 +46,11 @@ module type S = sig
 
   val get_name : 'a binder -> 'a name
   val get_text : 'a name -> string
-  val namespace : 'a name -> 'a namespace
+  val get_depth : 'a name -> int
+  val get_namespace : 'a name -> 'a namespace
+
+  type a_name = Name : 'a name -> a_name
+  val get_names : namegroup -> a_name list
 
   module Make_context(Info: TYPE) :
     CONTEXT with type 'a info = 'a Info.t
@@ -61,7 +65,7 @@ module With_namespace(Namespace: NAMESPACE)
 struct
   type 'a namespace = 'a Namespace.t
 
-  type 'a name = Name : {
+  type 'a name = Name_ : {
       namespace: 'a namespace;
       index: int;
       text: string;
@@ -73,6 +77,8 @@ struct
     | Prev_group : 'a name -> prev_name
     | Prev_origin
 
+  type a_name = Name : 'a name -> a_name
+
   type 'a binder = 'a name
 
   type namegroup = {
@@ -81,8 +87,19 @@ struct
   }
 
   let get_name (x : 'a binder) : 'a name = x
-  let get_text (Name n) = n.text
-  let namespace (Name n) = n.namespace
+  let get_text (Name_ n) = n.text
+  let get_depth (Name_ n) = n.index
+  let get_namespace (Name_ n) = n.namespace
+
+  let name_prev (Name_ n) = n.prev
+  let name_index (Name_ n) = n.index
+
+  let get_names g =
+    let rec aux acc = function
+      | Prev_name name -> aux (Name name :: acc) (name_prev name)
+      | Prev_group _ | Prev_origin -> acc
+    in
+    aux [] g.group_curr
 
   module Make_context(Info: TYPE) = struct
     type 'a info = 'a Info.t
@@ -107,38 +124,32 @@ struct
 
     let prev_index = function
       | Prev_origin -> -1
-      | Prev_group (Name {index; _}) | Prev_name (Name {index; _}) -> index
+      | Prev_group (Name_ {index; _}) | Prev_name (Name_ {index; _}) -> index
 
     let last_index t =
       prev_index (last_name t)
 
-    let offset_of t (Name n) =
+    let offset_of t (Name_ n) =
       last_index t - n.index
-
-    let name_prev (Name n) =
-      n.prev
-
-    let name_index (Name n) =
-      n.index
 
     let rec name_seq : prev_name -> a_name Seq.t = fun pname () ->
       match pname with
       | Prev_origin -> Seq.Nil
-      | Prev_name (Name n as name) -> Seq.Cons (A_name name, name_seq n.prev)
-      | Prev_group (Name n as name) -> Seq.Cons (A_name name, name_seq n.prev)
+      | Prev_name (Name_ n as name) -> Seq.Cons (A_name name, name_seq n.prev)
+      | Prev_group (Name_ n as name) -> Seq.Cons (A_name name, name_seq n.prev)
 
     let binding_name = function
       | Binding {name; _} -> A_name name
       | Undefined {name} -> A_name name
 
-    let dump_name (Name name) =
+    let dump_name (Name_ name) =
       let ns = Namespace.to_string name.namespace in
       Printf.sprintf "(%d) %s :: %s" name.index name.text ns
 
     let dump_a_name (A_name name) =
       dump_name name
 
-    let name_end_of_group (Name n) = match n.prev with
+    let name_end_of_group (Name_ n) = match n.prev with
       | Prev_name _ -> false
       | _ -> true
 
@@ -220,7 +231,7 @@ struct
         sync_seq [] [] (name_seq (Prev_name expected)) (Dbseq.to_seq context)
       in
       begin match kind with
-        | `Name ->
+        | `Name_ ->
           Printf.kprintf (Buffer.add_string buf)
             "%s: name %s is used in an invalid context:\n" caller (dump_name expected)
         | `Group ->
@@ -242,7 +253,7 @@ struct
 
     let empty = Dbseq.empty
 
-    let fresh_group t =
+    let empty_group t =
       let prev =
         if Dbseq.is_empty t then Prev_origin
         else match last_binding t with
@@ -252,14 +263,14 @@ struct
       {group_curr = prev; group_prev = prev}
 
     let next_name_from_prev namespace text prev =
-      Name {namespace; index = prev_index prev + 1; text; prev}
+      Name_ {namespace; index = prev_index prev + 1; text; prev}
 
     let extend g ns text =
       let name = next_name_from_prev ns text g.group_curr in
       let g = {group_curr = Prev_name name; group_prev = g.group_prev} in
       (g, name)
 
-    let lookup t (type a) (Name n as name : a name) : a info =
+    let lookup t (type a) (Name_ n as name : a name) : a info =
       let offset = offset_of t name in
       match Dbseq.get offset t with
       | exception Not_found ->
@@ -268,11 +279,11 @@ struct
         if same_name name b.name then
           error_invalid_binding "lookup" "undefined" name t
         else
-          error_invalid_context "lookup" `Name name t;
+          error_invalid_context "lookup" `Name_ name t;
       | Binding b ->
         if not (same_name name b.name) then
-          error_invalid_context "lookup" `Name name t;
-        let Name n' = b.name in
+          error_invalid_context "lookup" `Name_ name t;
+        let Name_ n' = b.name in
         match Namespace.order n'.namespace n.namespace with
         | Lt | Gt ->
           invalid_arg "Context.Make: \
@@ -283,11 +294,11 @@ struct
       let update = function
         | Binding b ->
           if not (same_name name b.name) then
-            error_invalid_context "update" `Name name t;
+            error_invalid_context "update" `Name_ name t;
           Binding {name; info}
         | Undefined b ->
           if not (same_name name b.name) then
-            error_invalid_context "update" `Name name t;
+            error_invalid_context "update" `Name_ name t;
           error_invalid_binding "lookup" "undefined" name t
       in
       let offset = offset_of t name in

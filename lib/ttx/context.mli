@@ -29,7 +29,7 @@ module type CONTEXT = sig
 
   (* Creating new bindings *)
 
-  val fresh_group : t -> namegroup
+  val empty_group : t -> namegroup
   val extend : namegroup -> 'a namespace -> string -> namegroup * 'a binder
 end
 
@@ -41,7 +41,11 @@ module type S = sig
 
   val get_name : 'a binder -> 'a name
   val get_text : 'a name -> string
-  val namespace : 'a name -> 'a namespace
+  val get_depth : 'a name -> int
+  val get_namespace : 'a name -> 'a namespace
+
+  type a_name = Name : 'a name -> a_name
+  val get_names : namegroup -> a_name list
 
   module Make_context(Info: TYPE) :
     CONTEXT with type 'a info = 'a Info.t

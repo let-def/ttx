@@ -118,8 +118,8 @@ and td_body = {
 
 and td_desc =
   | Td_abstract
-  | Td_record of record_label list
-  | Td_variant of variant_constructor list
+  | Td_record of record_label vector
+  | Td_variant of variant_constructor vector
   | Td_open
 
 (*type*)
@@ -237,5 +237,26 @@ module Type_expr = struct
     match t.te_desc with
     | None -> raise Undefined
     | Some d -> d
+
+  module Table = Hashtbl.Make(struct
+      type t = type_expr
+      let hash = hash
+      let equal = equal
+    end)
+
+  module Map = Map.Make(struct
+      type t = type_expr
+      let compare = compare
+    end)
+
+  module Set = Set.Make(struct
+      type t = type_expr
+      let compare = compare
+    end)
+
+  type 'a table = 'a Table.t
+  type 'a map = 'a Map.t
+  type set = Set.t
 end
+
 

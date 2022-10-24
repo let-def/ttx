@@ -90,9 +90,9 @@ module Vector : sig
   val of_list : 'a list -> 'a t
   val to_list : 'a t -> 'a list
   val of_array : 'a array -> 'a t
-  val to_array : 'a array -> 'a t
+  val to_array : 'a t -> 'a array
   val unsafe_of_array : 'a array -> 'a t
-  val unsafe_to_array : 'a array -> 'a t
+  val unsafe_to_array : 'a t -> 'a array
   val length : 'a t -> int
   val get : 'a t -> int -> 'a
   val iter : ('a -> unit) -> 'a t -> unit
